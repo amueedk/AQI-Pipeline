@@ -25,6 +25,9 @@ def save_features_to_hopsworks():
     if 'time' not in df.columns and df.index.name == 'time':
         df = df.reset_index()
 
+    # Create a string-based primary key for online store compatibility
+    df["time_key"] = df["time"].dt.strftime("%Y%m%d%H")  # '2025063009' format
+
     print(f"📄 Loaded {len(df)} records with {len(df.columns)} features")
     print("📊 Preview:")
     print(df.head())
@@ -35,8 +38,8 @@ def save_features_to_hopsworks():
         name=feature_group_name,
         version=VERSION,
         description="AQI engineered features for Multan",
-        primary_key=["time"],
-        event_time="time",
+        primary_key=["time_key"],  # Use string-based key for online store
+        event_time="time",         # Keep timestamp for event time
         online_enabled=True
     )
     

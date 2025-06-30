@@ -210,8 +210,8 @@ python hopsworks_integration.py
 ### Hopsworks Feature Store
 - **Feature Group**: `multan_aqi_features`
 - **Version**: 1
-- **Primary Key**: `time`
-- **Event Time**: `time`
+- **Primary Key**: `time_key` (string format: YYYYMMDDHH)
+- **Event Time**: `time` (timestamp)
 - **Online Enabled**: Yes (for real-time serving)
 
 ## 🔒 Privacy & Security
