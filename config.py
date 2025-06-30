@@ -53,8 +53,13 @@ PATHS = {
 }
 
 # Hopsworks Feature Store Configuration
+# To set up Hopsworks:
+# 1. Go to https://www.hopsworks.ai/ and create account
+# 2. Create a project (e.g., "AQI-Pipeline")
+# 3. Go to Settings -> API Keys -> Create API Key
+# 4. Add the API key to GitHub Secrets as HOPSWORKS_API_KEY
 HOPSWORKS_CONFIG = {
-    "api_key": os.getenv("HOPSWORKS_API_KEY"),
-    "project_name": "AQIMultan",
-    "feature_group_name": "AQI_Mul"
+    "api_key": os.getenv("HOPSWORKS_API_KEY", ""),  # Will be empty if not set
+    "project_name": "AQI-Pipeline",  # Your Hopsworks project name
+    "feature_group_name": "multan_aqi_features"  # Feature group name
 } 
