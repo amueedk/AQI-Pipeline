@@ -29,28 +29,22 @@ def save_features_to_hopsworks():
     print("📊 Preview:")
     print(df.head())
 
-    # Try to get feature group
-    try:
-        fg = fs.get_feature_group(name=feature_group_name, version=VERSION)
-        print(f"✅ Found existing feature group: {feature_group_name}")
-    except:
-        print(f"⚙️ Creating new feature group: {feature_group_name}")
-        fg = fs.get_or_create_feature_group(
-            name=feature_group_name,
-            version=VERSION,
-            description="AQI engineered features for Multan",
-            primary_key=["time"],
-            event_time="time",
-            online_enabled=True
-        )
-        if fg is None:
-            print("❌ Feature group creation failed. Check your schema, keys, or project.")
-            return False
-        print(f"✅ Created feature group: {fg.name} (v{fg.version})")
-
+    # Always use get_or_create_feature_group (never try to get first)
+    print(f"⚙️ Getting or creating feature group: {feature_group_name}")
+    fg = fs.get_or_create_feature_group(
+        name=feature_group_name,
+        version=VERSION,
+        description="AQI engineered features for Multan",
+        primary_key=["time"],
+        event_time="time",
+        online_enabled=True
+    )
+    
     if fg is None:
-        print("❌ Feature group is None. Cannot insert data.")
+        print("❌ Feature group creation failed. Check your schema, keys, or project.")
         return False
+    
+    print(f"✅ Feature group ready: {fg.name} (v{fg.version})")
 
     # Insert the features
     try:
