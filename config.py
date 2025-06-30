@@ -58,8 +58,9 @@ PATHS = {
 # 2. Create a project (e.g., "AQI-Pipeline")
 # 3. Go to Settings -> API Keys -> Create API Key
 # 4. Add the API key to GitHub Secrets as HOPSWORKS_API_KEY
+# 5. IMPORTANT: Update project_name below to match your actual Hopsworks project name
 HOPSWORKS_CONFIG = {
     "api_key": os.getenv("HOPSWORKS_API_KEY", ""),  # Will be empty if not set
-    "project_name": "AQI-Pipeline",  # Your Hopsworks project name
+    "project_name": "AQIMultan",  # Your actual Hopsworks project name
     "feature_group_name": "multan_aqi_features"  # Feature group name
 } 
