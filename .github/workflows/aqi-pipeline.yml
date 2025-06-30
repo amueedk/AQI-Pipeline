@@ -39,6 +39,7 @@ jobs:
           python hopsworks_integration.py
         env:
           HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
+        continue-on-error: true
 
       - name: Upload data artifacts
         uses: actions/upload-artifact@v4
