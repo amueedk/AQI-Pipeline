@@ -8,8 +8,8 @@ def save_features_to_hopsworks():
     project_name = HOPSWORKS_CONFIG["project_name"]
     feature_group_name = HOPSWORKS_CONFIG["feature_group_name"]
 
-    # Connect to Hopsworks
-    project = hopsworks.login(api_key_value=api_key).get_project(project_name)
+    # Connect to Hopsworks - login now returns Project directly
+    project = hopsworks.login(api_key_value=api_key, project=project_name)
     fs = project.get_feature_store()
 
     # Load engineered features
@@ -21,6 +21,7 @@ def save_features_to_hopsworks():
     # Create or get feature group
     try:
         fg = fs.get_feature_group(name=feature_group_name, version=1)
+        print(f"Found existing feature group: {feature_group_name}")
     except:
         fg = fs.create_feature_group(
             name=feature_group_name,
@@ -29,6 +30,7 @@ def save_features_to_hopsworks():
             primary_keys=["time"],
             online_enabled=True
         )
+        print(f"Created new feature group: {feature_group_name}")
 
     # Insert data
     fg.insert(df, write_options={"wait_for_job": True})
