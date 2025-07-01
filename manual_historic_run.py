@@ -56,16 +56,16 @@ def run_manual_backfill():
         logger.error("ERROR: HOPSWORKS_API_KEY environment variable is not set!")
 
     # 1. Collect Historical Data
-    logger.info("STEP 1: Collecting historical data for the last 14 days (OpenWeather only)...")
+    logger.info("STEP 1: Collecting historical data for the last 16 days (OpenWeather only)...")
     collector = OpenWeatherDataCollector()
-    raw_df = collector.collect_historical_data(days_back=14)
+    raw_df = collector.collect_historical_data(days_back=16)
     if raw_df.empty:
         logger.error("Data collection failed. No data to process. Aborting.")
         return False
     logger.info(f"Successfully collected {len(raw_df)} records.")
 
     # Save AQI validation data as CSV (only AQI data for comparison)
-    start = (datetime.datetime.utcnow() - datetime.timedelta(days=14)).strftime('%Y%m%d')
+    start = (datetime.datetime.utcnow() - datetime.timedelta(days=16)).strftime('%Y%m%d')
     end = datetime.datetime.utcnow().strftime('%Y%m%d')
     
     # Extract only AQI validation columns
