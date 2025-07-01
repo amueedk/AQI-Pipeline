@@ -23,7 +23,8 @@ DATA_CONFIG = {
 
 # Feature Engineering Configuration
 FEATURE_CONFIG = {
-    "target_column": "us_aqi",  # Target variable for future ML models (calculated US EPA AQI)
+    "target_columns": ["pm2_5", "pm10"],  # Target variables for future ML models (raw concentrations)
+    "primary_target": "pm2_5",  # Primary target for feature engineering
     "lag_hours": [1, 2, 3, 6, 12, 24, 48, 72],  # Lag features to create
     "rolling_windows": [3, 6, 12, 24]  # Rolling statistics windows
 }

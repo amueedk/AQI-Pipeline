@@ -84,37 +84,18 @@ def calc_aqi(conc, breakpoints):
     print(f"calc_aqi: conc={conc} did not match any breakpoint, returning None")
     return None
 
-def compute_all_aqi(row):
-    aqi_values = {}
+def compute_pm2_5_aqi(row):
+    """
+    Compute PM2.5 AQI only (since PM2.5 is typically the dominant pollutant)
+    """
     if not pd.isna(row.get("pm2_5")):
-        aqi_values["pm2_5_aqi"] = calc_aqi(row["pm2_5"], AQI_BREAKPOINTS["pm2_5"])
-    if not pd.isna(row.get("pm10")):
-        aqi_values["pm10_aqi"] = calc_aqi(row["pm10"], AQI_BREAKPOINTS["pm10"])
-    if not pd.isna(row.get("ozone")):
-        aqi_values["o3_aqi"] = calc_aqi(row["ozone"], AQI_BREAKPOINTS["o3_8h"])
-    if not pd.isna(row.get("carbon_monoxide")):
-        aqi_values["co_aqi"] = calc_aqi(row["carbon_monoxide"], AQI_BREAKPOINTS["co"])
-    if not pd.isna(row.get("sulphur_dioxide")):
-        aqi_values["so2_aqi"] = calc_aqi(row["sulphur_dioxide"], AQI_BREAKPOINTS["so2"])
-    if not pd.isna(row.get("nitrogen_dioxide")):
-        aqi_values["no2_aqi"] = calc_aqi(row["nitrogen_dioxide"], AQI_BREAKPOINTS["no2"])
-    return aqi_values
-
-def compute_overall_aqi(row):
-    aqi_values = {
-        "pm2_5_aqi": row.get("pm2_5_aqi"),
-        "pm10_aqi": row.get("pm10_aqi"),
-        "ozone_aqi": row.get("o3_aqi"),
-        "carbon_monoxide_aqi": row.get("co_aqi"),
-        "sulphur_dioxide_aqi": row.get("so2_aqi"),
-        "nitrogen_dioxide_aqi": row.get("no2_aqi"),
-    }
-    valid_values = [v for v in aqi_values.values() if pd.notna(v)]
-    return max(valid_values) if valid_values else None
+        return calc_aqi(row["pm2_5"], AQI_BREAKPOINTS["pm2_5"])
+    return None
 
 class AQIFeatureEngineer:
     def __init__(self):
-        self.target_column = FEATURE_CONFIG["target_column"]
+        self.target_columns = FEATURE_CONFIG["target_columns"]
+        self.primary_target = FEATURE_CONFIG["primary_target"]
         self.lag_hours = FEATURE_CONFIG["lag_hours"]
         self.rolling_windows = FEATURE_CONFIG["rolling_windows"]
         
@@ -138,70 +119,73 @@ class AQIFeatureEngineer:
     def create_time_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Create time-based features from datetime index
+        Using only cyclic encoding for better ML performance
         """
         df = df.copy()
         
-        # Basic time features
-        df['hour'] = df.index.hour
-        df['day'] = df.index.day
-        df['month'] = df.index.month
-        df['year'] = df.index.year
-        df['day_of_week'] = df.index.dayofweek
-        df['day_of_year'] = df.index.dayofyear
-        df['week_of_year'] = df.index.isocalendar().week
+        # Extract time components for cyclic encoding
+        hour = df.index.hour
+        day = df.index.day
+        month = df.index.month
+        day_of_week = df.index.dayofweek
         
-        # Cyclical encoding for periodic features
-        df['hour_sin'] = np.sin(2 * np.pi * df['hour'] / 24)
-        df['hour_cos'] = np.cos(2 * np.pi * df['hour'] / 24)
-        df['day_sin'] = np.sin(2 * np.pi * df['day'] / 31)
-        df['day_cos'] = np.cos(2 * np.pi * df['day'] / 31)
-        df['month_sin'] = np.sin(2 * np.pi * df['month'] / 12)
-        df['month_cos'] = np.cos(2 * np.pi * df['month'] / 12)
-        df['day_of_week_sin'] = np.sin(2 * np.pi * df['day_of_week'] / 7)
-        df['day_of_week_cos'] = np.cos(2 * np.pi * df['day_of_week'] / 7)
+        # Cyclical encoding for periodic features (more effective for ML)
+        df['hour_sin'] = np.sin(2 * np.pi * hour / 24)
+        df['hour_cos'] = np.cos(2 * np.pi * hour / 24)
+        df['day_sin'] = np.sin(2 * np.pi * day / 31)
+        df['day_cos'] = np.cos(2 * np.pi * day / 31)
+        df['month_sin'] = np.sin(2 * np.pi * month / 12)
+        df['month_cos'] = np.cos(2 * np.pi * month / 12)
+        df['day_of_week_sin'] = np.sin(2 * np.pi * day_of_week / 7)
+        df['day_of_week_cos'] = np.cos(2 * np.pi * day_of_week / 7)
         
         # Season features
-        df['is_spring'] = ((df['month'] >= 3) & (df['month'] <= 5)).astype(int)
-        df['is_summer'] = ((df['month'] >= 6) & (df['month'] <= 8)).astype(int)
-        df['is_autumn'] = ((df['month'] >= 9) & (df['month'] <= 11)).astype(int)
-        df['is_winter'] = ((df['month'] == 12) | (df['month'] <= 2)).astype(int)
+        df['is_spring'] = ((month >= 3) & (month <= 5)).astype(int)
+        df['is_summer'] = ((month >= 6) & (month <= 8)).astype(int)
+        df['is_autumn'] = ((month >= 9) & (month <= 11)).astype(int)
+        df['is_winter'] = ((month == 12) | (month <= 2)).astype(int)
         
         # Day/Night feature
-        df['is_night'] = ((df['hour'] >= 22) | (df['hour'] <= 6)).astype(int)
+        df['is_night'] = ((hour >= 22) | (hour <= 6)).astype(int)
         
         # Rush hour features
-        df['is_morning_rush'] = ((df['hour'] >= 7) & (df['hour'] <= 9)).astype(int)
-        df['is_evening_rush'] = ((df['hour'] >= 17) & (df['hour'] <= 19)).astype(int)
+        df['is_morning_rush'] = ((hour >= 7) & (hour <= 9)).astype(int)
+        df['is_evening_rush'] = ((hour >= 17) & (hour <= 19)).astype(int)
         
-        logger.info("Created time-based features")
+        logger.info("Created cyclic time-based features")
         return df
     
     def create_lag_features(self, df: pd.DataFrame, target_col: str = None) -> pd.DataFrame:
         """
         Create lag features for time series prediction
+        Only create lags for PM2.5 and PM10 (target variables)
+        Other pollutants are used as current features only
         """
         if target_col is None:
-            target_col = self.target_column
+            target_col = self.primary_target
             
         df = df.copy()
         
-        # Create lag features for target variable
-        for lag in self.lag_hours:
-            df[f'{target_col}_lag_{lag}h'] = df[target_col].shift(lag)
+        # Create lag features for both target variables (PM2.5 and PM10)
+        for target in self.target_columns:
+            if target in df.columns:
+                # Create lag features for target variable
+                for lag in self.lag_hours:
+                    df[f'{target}_lag_{lag}h'] = df[target].shift(lag)
+                
+                # Create rolling statistics
+                for window in self.rolling_windows:
+                    df[f'{target}_rolling_mean_{window}h'] = df[target].rolling(window=window).mean()
+                    df[f'{target}_rolling_std_{window}h'] = df[target].rolling(window=window).std()
+                    df[f'{target}_rolling_min_{window}h'] = df[target].rolling(window=window).min()
+                    df[f'{target}_rolling_max_{window}h'] = df[target].rolling(window=window).max()
+                
+                # Create change rate features
+                df[f'{target}_change_rate_1h'] = df[target].pct_change(1)
+                df[f'{target}_change_rate_6h'] = df[target].pct_change(6)
+                df[f'{target}_change_rate_24h'] = df[target].pct_change(24)
         
-        # Create rolling statistics
-        for window in self.rolling_windows:
-            df[f'{target_col}_rolling_mean_{window}h'] = df[target_col].rolling(window=window).mean()
-            df[f'{target_col}_rolling_std_{window}h'] = df[target_col].rolling(window=window).std()
-            df[f'{target_col}_rolling_min_{window}h'] = df[target_col].rolling(window=window).min()
-            df[f'{target_col}_rolling_max_{window}h'] = df[target_col].rolling(window=window).max()
-        
-        # Create change rate features
-        df[f'{target_col}_change_rate_1h'] = df[target_col].pct_change(1)
-        df[f'{target_col}_change_rate_6h'] = df[target_col].pct_change(6)
-        df[f'{target_col}_change_rate_24h'] = df[target_col].pct_change(24)
-        
-        logger.info("Created lag features")
+        logger.info(f"Created lag features for target variables: {self.target_columns}")
         return df
     
     def create_weather_derived_features(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -235,24 +219,25 @@ class AQIFeatureEngineer:
     
     def create_pollutant_derived_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Create derived features from pollutant data
+        Create derived features from pollutant data, focusing on PM2.5 prediction
         """
         df = df.copy()
         
-        # PM2.5 features
+        # PM2.5 features (target variable)
         if 'pm2_5' in df.columns:
             df['pm2_5_squared'] = df['pm2_5'] ** 2
             df['pm2_5_change_rate'] = df['pm2_5'].pct_change(1)
             df['is_high_pm2_5'] = (df['pm2_5'] > 35).astype(int)
             df['is_low_pm2_5'] = (df['pm2_5'] < 12).astype(int)
         
-        # PM10 features
+        # PM10 features (important for PM2.5 prediction)
         if 'pm10' in df.columns:
             df['pm10_squared'] = df['pm10'] ** 2
             df['pm10_change_rate'] = df['pm10'].pct_change(1)
             df['is_high_pm10'] = (df['pm10'] > 50).astype(int)
             df['is_low_pm10'] = (df['pm10'] < 20).astype(int)
         
+        # Keep raw pollutant concentrations as features (they influence PM2.5)
         # NO2 features
         if 'nitrogen_dioxide' in df.columns:
             df['no2_squared'] = df['nitrogen_dioxide'] ** 2
@@ -277,14 +262,11 @@ class AQIFeatureEngineer:
             df['so2_change_rate'] = df['sulphur_dioxide'].pct_change(1)
             df['is_high_so2'] = (df['sulphur_dioxide'] > 500).astype(int)
         
-        # Ratio features
-        if 'pm2_5' in df.columns and 'pm10' in df.columns:
-            df['pm2_5_pm10_ratio'] = df['pm2_5'] / (df['pm10'] + 1e-8)
+        # Important ratio features for PM2.5 prediction
+        # Note: We don't create pm2_5_pm10_ratio as it would cause data leakage
+        # since pm2_5 is our target variable
         
-        if 'nitrogen_dioxide' in df.columns and 'ozone' in df.columns:
-            df['no2_o3_ratio'] = df['nitrogen_dioxide'] / (df['ozone'] + 1e-8)
-        
-        logger.info("Created pollutant-derived features")
+        logger.info("Created PM2.5/PM10-focused pollutant-derived features")
         return df
     
     def create_interaction_features(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -350,47 +332,32 @@ class AQIFeatureEngineer:
     def engineer_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Run the full feature engineering pipeline on a dataframe
-        Computes AQI for each pollutant and overall AQI using OpenWeather data.
-        Excludes IQAir and abs_deviation fields from features.
+        Focuses on PM2.5 and PM10 prediction while keeping all raw pollutant concentrations as features.
+        Computes PM2.5 AQI, PM10 AQI, and US AQI (max of both).
+        Uses cyclic time encoding instead of raw time features for better ML performance.
+        Removes static location data (city, lat, lon) as they don't add predictive value.
         """
-        logger.info(f"Starting feature engineering on dataframe with {len(df)} rows.")
+        logger.info(f"Starting PM2.5/PM10-focused feature engineering on dataframe with {len(df)} rows.")
         
         # Ensure index is datetime
         if not isinstance(df.index, pd.DatetimeIndex):
             df.index = pd.to_datetime(df.index)
 
-        # --- UNIT CONVERSIONS FOR AQI ---
-        # CO: μg/m³ to ppm
-        if 'carbon_monoxide' in df.columns:
-            df['carbon_monoxide_ppm'] = df['carbon_monoxide'] / 1145
-        # NO2: μg/m³ to ppb
-        if 'nitrogen_dioxide' in df.columns:
-            df['nitrogen_dioxide_ppb'] = df['nitrogen_dioxide'] * 0.5229
-        # O3: μg/m³ to ppb
-        if 'ozone' in df.columns:
-            df['ozone_ppb'] = df['ozone'] * 0.509
-        # SO2: μg/m³ to ppb
-        if 'sulphur_dioxide' in df.columns:
-            df['sulphur_dioxide_ppb'] = df['sulphur_dioxide'] * 0.381
-
-        # Compute AQI for each pollutant and overall AQI
-        # Use converted columns for AQI calculation
-        aqi_cols = [
-            ("pm2_5", "pm2_5", None),
-            ("pm10", "pm10", None),
-            ("ozone", "ozone_ppb", "o3_8h"),
-            ("carbon_monoxide", "carbon_monoxide_ppm", "co"),
-            ("sulphur_dioxide", "sulphur_dioxide_ppb", "so2"),
-            ("nitrogen_dioxide", "nitrogen_dioxide_ppb", "no2"),
-        ]
-        for orig_col, aqi_col, bp_key in aqi_cols:
-            aqi_name = f"{orig_col}_aqi"
-            if aqi_col in df.columns:
-                breakpoints = AQI_BREAKPOINTS[bp_key if bp_key else orig_col]
-                df[aqi_name] = df.apply(lambda row: calc_aqi(row[aqi_col], breakpoints) if not pd.isna(row.get(aqi_col)) else None, axis=1)
-            else:
-                df[aqi_name] = None
-        df["overall_aqi"] = df.apply(compute_overall_aqi, axis=1)
+        # --- COMPUTE ONLY FINAL US AQI ---
+        # Calculate PM2.5 AQI (temporary, not stored in Hopsworks)
+        if 'pm2_5' in df.columns:
+            pm2_5_aqi_temp = df.apply(lambda row: calc_aqi(row['pm2_5'], AQI_BREAKPOINTS['pm2_5']) if not pd.isna(row.get('pm2_5')) else None, axis=1)
+        else:
+            pm2_5_aqi_temp = pd.Series([None] * len(df))
+            
+        # Calculate PM10 AQI (temporary, not stored in Hopsworks)
+        if 'pm10' in df.columns:
+            pm10_aqi_temp = df.apply(lambda row: calc_aqi(row['pm10'], AQI_BREAKPOINTS['pm10']) if not pd.isna(row.get('pm10')) else None, axis=1)
+        else:
+            pm10_aqi_temp = pd.Series([None] * len(df))
+            
+        # Calculate US AQI as maximum of PM2.5 and PM10 AQI (stored in Hopsworks)
+        df['us_aqi'] = df.apply(lambda row: max(pm2_5_aqi_temp.iloc[row.name], pm10_aqi_temp.iloc[row.name]) if pd.notna(pm2_5_aqi_temp.iloc[row.name]) and pd.notna(pm10_aqi_temp.iloc[row.name]) else None, axis=1)
 
         # The rest of the pipeline (time features, lags, etc.)
         engineered_df = self.create_time_features(df)
@@ -405,34 +372,35 @@ class AQIFeatureEngineer:
         for col in numeric_cols:
             engineered_df[col] = engineered_df[col].astype('float64')
         
-        # Drop city, latitude, longitude columns if present
-        for col in ['city', 'latitude', 'longitude']:
+        # Drop location and raw time columns (using cyclic encoding instead)
+        columns_to_drop = [
+            'city', 'latitude', 'longitude',  # Static location data
+            'hour', 'day', 'month', 'year', 'day_of_week', 'day_of_year', 'week_of_year'  # Raw time features (replaced by cyclic)
+        ]
+        
+        for col in columns_to_drop:
             if col in engineered_df.columns:
                 engineered_df = engineered_df.drop(columns=[col])
+                logger.info(f"Dropped column '{col}' (using cyclic encoding or static data)")
 
-        # Drop raw time columns if present
-        for col in ['hour', 'month', 'day', 'day_of_week', 'day_of_year', 'week_of_year']:
-            if col in engineered_df.columns:
-                engineered_df = engineered_df.drop(columns=[col])
-
-        # Drop intermediate unit conversion columns if present
-        for col in ['carbon_monoxide_ppm', 'nitrogen_dioxide_ppb', 'ozone_ppb', 'sulphur_dioxide_ppb']:
-            if col in engineered_df.columns:
-                engineered_df = engineered_df.drop(columns=[col])
-
-        logger.info(f"Feature engineering complete. Final dataframe shape: {engineered_df.shape}")
+        logger.info(f"PM2.5/PM10-focused feature engineering complete. Final dataframe shape: {engineered_df.shape}")
         logger.info(f"Converted {len(numeric_cols)} numeric columns to float64 for Hopsworks compatibility")
         return engineered_df
     
-    def get_feature_columns(self, df: pd.DataFrame, exclude_target: bool = True) -> List[str]:
+    def get_feature_columns(self, df: pd.DataFrame, exclude_targets: bool = True) -> List[str]:
         """
         Get the list of feature column names from the dataframe.
-        Excludes non-feature columns and optionally the target column.
-        Excludes IQAir and abs_deviation fields.
+        Excludes non-feature columns and optionally the target columns.
+        Excludes location data, raw time features, and validation fields.
         """
-        cols_to_exclude = ['city', 'latitude', 'longitude', 'iqair_aqi', 'abs_deviation', 'openweather_aqi']
-        if exclude_target:
-            cols_to_exclude.append(self.target_column)
+        cols_to_exclude = [
+            'city', 'latitude', 'longitude',  # Static location data
+            'hour', 'day', 'month', 'year', 'day_of_week', 'day_of_year', 'week_of_year',  # Raw time features
+            'pm2_5_aqi', 'pm10_aqi',  # Intermediate AQI calculations (not stored in Hopsworks)
+            'iqair_aqi', 'abs_deviation'  # Validation fields
+        ]
+        if exclude_targets:
+            cols_to_exclude.extend(self.target_columns)
             
         feature_cols = [col for col in df.columns if col not in cols_to_exclude]
         return feature_cols

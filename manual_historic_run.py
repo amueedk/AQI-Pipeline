@@ -64,18 +64,15 @@ def run_manual_backfill():
         return False
     logger.info(f"Successfully collected {len(raw_df)} records.")
 
-    # Save AQI validation data as CSV (only AQI data for comparison)
+    # Save AQI validation data as CSV (for your reference only)
     start = (datetime.datetime.utcnow() - datetime.timedelta(days=16)).strftime('%Y%m%d')
     end = datetime.datetime.utcnow().strftime('%Y%m%d')
-    
-    # Extract only AQI validation columns
     raw_df_reset = raw_df.reset_index()
     validation_cols = ['time', 'openweather_aqi', 'us_aqi']
     validation_df = raw_df_reset[validation_cols].copy()
-    
     validation_path = f"data/aqi_validation_historic_{start}_to_{end}.csv"
     os.makedirs("data", exist_ok=True)
-    validation_df.to_csv(validation_path)
+    validation_df.to_csv(validation_path, index=False)
     logger.info(f"AQI validation data saved to {validation_path}")
 
     # 2. Engineer Features
@@ -83,11 +80,23 @@ def run_manual_backfill():
     engineer = AQIFeatureEngineer()
 
     # Remove validation-only columns if present
-    columns_to_remove = ['iqair_aqi', 'abs_deviation', 'openweather_aqi']
+    columns_to_remove = ['iqair_aqi', 'abs_deviation']
     for col in columns_to_remove:
         if col in raw_df.columns:
             raw_df = raw_df.drop(columns=[col])
             logger.info(f"Removed column '{col}' for Hopsworks consistency")
+    
+    # Note: We keep all raw pollutant concentrations as features for PM2.5 prediction
+    logger.info("Keeping all raw pollutant concentrations as features for PM2.5 prediction")
+
+    # Rename columns to match feature engineering expectations
+    rename_map = {
+        'co': 'carbon_monoxide',
+        'no2': 'nitrogen_dioxide',
+        'o3': 'ozone',
+        'so2': 'sulphur_dioxide'
+    }
+    raw_df = raw_df.rename(columns=rename_map)
 
     # Explicitly cast all numerics to float64
     numeric_cols = raw_df.select_dtypes(include=['int64', 'float64']).columns
@@ -101,11 +110,15 @@ def run_manual_backfill():
         return False
     logger.info(f"Successfully engineered {engineered_df.shape[1]} features.")
 
-    # Debug: Print all columns and all AQI columns before upload
+    # Debug: Print all columns and PM2.5-related columns before upload
     print("Engineered DataFrame columns:")
     print(engineered_df.columns.tolist())
-    print("\nFirst 20 rows of all AQI columns:")
-    print(engineered_df.filter(like='_aqi').head(20))
+    print("\nFirst 20 rows of PM2.5-related columns:")
+    pm25_cols = [col for col in engineered_df.columns if 'pm2_5' in col.lower()]
+    print(engineered_df[pm25_cols].head(20))
+    print(f"\nUS AQI range: {engineered_df['us_aqi'].min()} - {engineered_df['us_aqi'].max()}")
+    print(f"Raw PM2.5 range: {engineered_df['pm2_5'].min():.2f} - {engineered_df['pm2_5'].max():.2f} μg/m³")
+    print(f"Raw PM10 range: {engineered_df['pm10'].min():.2f} - {engineered_df['pm10'].max():.2f} μg/m³")
 
     # 3. Push to Hopsworks
     logger.info("\nSTEP 3: Pushing features to Hopsworks...")
@@ -120,7 +133,7 @@ def run_manual_backfill():
     success = uploader.push_features(
         df=engineered_df,
         group_name=HOPSWORKS_CONFIG['feature_group_name'],
-        description="Historical backfill of AQI and weather features for Multan."
+        description="Historical backfill of PM2.5 and PM10 prediction features for Multan. Targets: pm2_5, pm10 (raw concentrations), Reference: us_aqi (final AQI)."
     )
 
     if not success:

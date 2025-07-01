@@ -121,7 +121,7 @@ def main():
         success = uploader.push_features(
             df=engineered_df,
             group_name=HOPSWORKS_CONFIG['feature_group_name'],
-            description="AQI and weather features for Multan"
+            description="PM2.5 prediction features for Multan. Target: pm2_5 (raw concentration), AQI: us_aqi (calculated from PM2.5)."
         )
         if success:
             logger.info("--- Hopsworks Test: Successfully completed. ---")

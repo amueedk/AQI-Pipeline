@@ -105,43 +105,11 @@ def calc_aqi(conc, breakpoints):
             return round((I_high - I_low) / (C_high - C_low) * (conc - C_low) + I_low)
     return None
 
-def compute_overall_aqi(row):
-    """Compute overall AQI from individual pollutant AQIs"""
-    aqi_values = []
-    
-    # Calculate AQI for each pollutant
+def compute_pm2_5_aqi(row):
+    """Compute PM2.5 AQI only (since PM2.5 is typically the dominant pollutant)"""
     if not pd.isna(row.get("pm2_5")):
-        pm25_aqi = calc_aqi(row["pm2_5"], AQI_BREAKPOINTS["pm2_5"])
-        if pm25_aqi is not None:
-            aqi_values.append(pm25_aqi)
-    
-    if not pd.isna(row.get("pm10")):
-        pm10_aqi = calc_aqi(row["pm10"], AQI_BREAKPOINTS["pm10"])
-        if pm10_aqi is not None:
-            aqi_values.append(pm10_aqi)
-    
-    if not pd.isna(row.get("ozone")):
-        o3_aqi = calc_aqi(row["ozone"], AQI_BREAKPOINTS["o3_8h"])
-        if o3_aqi is not None:
-            aqi_values.append(o3_aqi)
-    
-    if not pd.isna(row.get("carbon_monoxide")):
-        co_aqi = calc_aqi(row["carbon_monoxide"], AQI_BREAKPOINTS["co"])
-        if co_aqi is not None:
-            aqi_values.append(co_aqi)
-    
-    if not pd.isna(row.get("sulphur_dioxide")):
-        so2_aqi = calc_aqi(row["sulphur_dioxide"], AQI_BREAKPOINTS["so2"])
-        if so2_aqi is not None:
-            aqi_values.append(so2_aqi)
-    
-    if not pd.isna(row.get("nitrogen_dioxide")):
-        no2_aqi = calc_aqi(row["nitrogen_dioxide"], AQI_BREAKPOINTS["no2"])
-        if no2_aqi is not None:
-            aqi_values.append(no2_aqi)
-    
-    # Return the maximum AQI value (worst pollutant)
-    return max(aqi_values) if aqi_values else None
+        return calc_aqi(row["pm2_5"], AQI_BREAKPOINTS["pm2_5"])
+    return None
 
 class IQAirDataCollector:
     def __init__(self):
@@ -227,17 +195,22 @@ class OpenWeatherDataCollector:
         rows = []
         for entry in data["list"]:
             row = {"time": pd.to_datetime(entry["dt"], unit="s", utc=True)}
-            row["openweather_aqi"] = entry["main"]["aqi"]  # Keep OpenWeather's simple AQI
             for k, v in entry["components"].items():
                 row[k] = v
+            # Extract OpenWeather AQI (1-5 scale)
+            if "main" in entry and "aqi" in entry["main"]:
+                row["openweather_aqi"] = entry["main"]["aqi"]
+            else:
+                row["openweather_aqi"] = None
             rows.append(row)
-        
         df = pd.DataFrame(rows)
         df.set_index("time", inplace=True)
-        
-        # Calculate US EPA AQI from pollutant concentrations
-        df["us_aqi"] = df.apply(compute_overall_aqi, axis=1)
-        
+        # Calculate PM2.5 AQI
+        df["pm2_5_aqi"] = df.apply(compute_pm2_5_aqi, axis=1)
+        # Calculate PM10 AQI
+        df["pm10_aqi"] = df.apply(lambda row: calc_aqi(row.get('pm10'), AQI_BREAKPOINTS['pm10']) if pd.notna(row.get('pm10')) else None, axis=1)
+        # Calculate US AQI as maximum of PM2.5 and PM10 AQI
+        df["us_aqi"] = df.apply(lambda row: max(row['pm2_5_aqi'], row['pm10_aqi']) if pd.notna(row.get('pm2_5_aqi')) and pd.notna(row.get('pm10_aqi')) else None, axis=1)
         return df
 
     def fetch_weather(self, dt_unix=None):
@@ -308,7 +281,7 @@ def collect_current_data_with_iqair():
     # Save only validation data (much smaller files)
     # Reset index to make 'time' a column again
     df_reset = df.reset_index()
-    validation_cols = ['time', 'openweather_aqi', 'iqair_aqi', 'abs_deviation', 'us_aqi']
+    validation_cols = ['time', 'us_aqi', 'iqair_aqi', 'abs_deviation']
     # Only include columns that exist
     available_cols = [col for col in validation_cols if col in df_reset.columns]
     logger.info(f"DEBUG: Available columns in DataFrame: {list(df_reset.columns)}")
@@ -318,7 +291,7 @@ def collect_current_data_with_iqair():
     
     # Save to monthly validation file
     monthly = datetime.datetime.utcnow().strftime('%Y%m')
-    validation_path = f"data/validation_monthly_{monthly}.csv"
+    validation_path = f"data/pm2_5_validation_monthly_{monthly}.csv"
     
     # Ensure data directory exists
     os.makedirs("data", exist_ok=True)

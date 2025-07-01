@@ -65,7 +65,7 @@ def run_hourly_update():
     
     # Create copy for Hopsworks (without IQAir columns to match historic schema)
     raw_df = raw_df_with_iqair.copy()
-    columns_to_remove = ['iqair_aqi', 'abs_deviation', 'openweather_aqi']
+    columns_to_remove = ['iqair_aqi', 'abs_deviation']
     for col in columns_to_remove:
         if col in raw_df.columns:
             raw_df = raw_df.drop(columns=[col])
@@ -77,23 +77,25 @@ def run_hourly_update():
         raw_df[col] = raw_df[col].astype('float64')
     logger.info(f"Casted {len(numeric_cols)} numeric columns to float64 for Hopsworks consistency")
 
-    # Save AQI validation data as CSV (only AQI data for comparison)
+    # Rename columns to match feature engineering expectations
+    rename_map = {
+        'co': 'carbon_monoxide',
+        'no2': 'nitrogen_dioxide',
+        'o3': 'ozone',
+        'so2': 'sulphur_dioxide'
+    }
+    raw_df = raw_df.rename(columns=rename_map)
+
+    # Save AQI validation data as CSV (for your reference only)
     import datetime
     now = datetime.datetime.utcnow()
     validation_path = f"data/aqi_validation_current_{now.strftime('%Y%m%d_%H')}.csv"
     os.makedirs("data", exist_ok=True)
-    
-    # Extract only AQI validation columns (use DataFrame with IQAir data)
+    # Extract only relevant validation columns (use DataFrame with IQAir data)
     raw_df_reset = raw_df_with_iqair.reset_index()
     validation_cols = ['time', 'openweather_aqi', 'us_aqi', 'iqair_aqi', 'abs_deviation']
-    # Only include columns that exist
     available_cols = [col for col in validation_cols if col in raw_df_reset.columns]
-    logger.info(f"DEBUG: Available columns in DataFrame: {list(raw_df_reset.columns)}")
-    logger.info(f"DEBUG: Validation columns requested: {validation_cols}")
-    logger.info(f"DEBUG: Validation columns available: {available_cols}")
     validation_df = raw_df_reset[available_cols].copy()
-
-    # Save to a new hourly CSV file (no appending)
     validation_df.to_csv(validation_path, index=False)
     logger.info(f"Created new hourly AQI validation file: {validation_path}")
 
@@ -120,7 +122,7 @@ def run_hourly_update():
     success = uploader.push_features(
         df=engineered_df,
         group_name=HOPSWORKS_CONFIG['feature_group_name'],
-        description="Hourly update of AQI and weather features for Multan."
+        description="Hourly update of PM2.5 and PM10 prediction features for Multan. Targets: pm2_5, pm10 (raw concentrations), Reference: us_aqi (final AQI)."
     )
     
     if not success:
