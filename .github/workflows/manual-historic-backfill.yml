@@ -1,14 +1,11 @@
-name: Hourly AQI Data Pipeline
+name: Manual Historic AQI Data Backfill
 
 on:
-  schedule:
-    # Runs at the beginning of every hour
-    - cron: '0 * * * *'
   workflow_dispatch:
-    # Allows manual triggering from the GitHub UI
+    # Allows manual triggering from the GitHub UI for one-time backfill
 
 jobs:
-  hourly-update:
+  historic-backfill:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository code
@@ -25,29 +22,29 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run automated hourly update script
-        # This script handles data collection, feature engineering,
-        # and pushing to Hopsworks.
+      - name: Run manual historic backfill script
+        # This script handles historical data collection, feature engineering,
+        # and pushing to Hopsworks for initial backfill.
         run: |
-          python automated_hourly_run.py
+          python manual_historic_run.py
         env:
           HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
 
-      - name: Commit and push raw data files
+      - name: Commit and push raw historic data
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add data/raw_current_*.csv
-          git diff --quiet && git diff --staged --quiet || git commit -m "Update AQI raw data - ${{ github.run_number }}"
+          git add data/raw_historic_*.csv
+          git diff --quiet && git diff --staged --quiet || git commit -m "Add historic AQI data backfill - ${{ github.run_number }}"
           git push
 
       - name: Upload logs and data on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: aqi-logs-${{ github.run_number }}
+          name: historic-backfill-logs-${{ github.run_number }}
           path: |
-            automated_run.log
+            manual_run.log
             logs/
             data/
           retention-days: 7 
