@@ -1,0 +1,112 @@
+"""
+Automated Hourly Data Run
+--------------------------
+This script is designed to be run automatically (e.g., by a GitHub Action)
+on an hourly schedule.
+
+It will:
+1. Fetch the most recent air quality and weather data (current hour).
+2. Engineer features for this new data.
+3. Push the resulting features to the Hopsworks feature group to keep it
+   up-to-date.
+"""
+import logging
+import os
+from config import HOPSWORKS_CONFIG
+from data_collector import collect_current_data_with_iqair
+from feature_engineering import AQIFeatureEngineer
+from hopsworks_integration import HopsworksUploader
+import pandas as pd
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler("automated_run.log"),
+        logging.StreamHandler()
+    ]
+)
+
+logger = logging.getLogger(__name__)
+
+def run_hourly_update():
+    """
+    Executes the hourly data update pipeline.
+    """
+    logger.info("=======================================")
+    logger.info("=== STARTING AUTOMATED HOURLY UPDATE ===")
+    logger.info("=======================================")
+
+    # 1. Collect Current Data (OpenWeather + IQAir AQI for comparison)
+    logger.info("STEP 1: Collecting current data (OpenWeather + IQAir AQI for comparison)...")
+    raw_df = collect_current_data_with_iqair()
+    if raw_df.empty:
+        logger.warning("No new data collected in the last hour. Exiting gracefully.")
+        return True
+    logger.info(f"Successfully collected {len(raw_df)} new records.")
+
+    # Save raw data as CSV (including IQAir data for validation)
+    import datetime
+    daily_date = datetime.datetime.utcnow().strftime('%Y%m%d')
+    raw_path = f"data/raw_current_{daily_date}.csv"
+    os.makedirs("data", exist_ok=True)
+    
+    # Check if file exists and append, or create new file
+    if os.path.exists(raw_path):
+        try:
+            existing_df = pd.read_csv(raw_path, index_col=0, parse_dates=True)
+            # Append new data
+            combined_df = pd.concat([existing_df, raw_df])
+            # Remove duplicates based on timestamp (keep the latest)
+            combined_df = combined_df[~combined_df.index.duplicated(keep='last')]
+            # Sort by timestamp
+            combined_df = combined_df.sort_index()
+            combined_df.to_csv(raw_path)
+            logger.info(f"Appended to existing daily file: {raw_path}")
+        except Exception as e:
+            logger.warning(f"Error reading existing daily file: {e}. Creating new file.")
+            raw_df.to_csv(raw_path)
+            logger.info(f"Created new daily file: {raw_path}")
+    else:
+        raw_df.to_csv(raw_path)
+        logger.info(f"Created new daily file: {raw_path}")
+
+    # 2. Engineer Features
+    logger.info("\nSTEP 2: Engineering features for new data...")
+    engineer = AQIFeatureEngineer()
+    engineered_df = engineer.engineer_features(raw_df)
+    if engineered_df.empty:
+        logger.error("Feature engineering resulted in an empty DataFrame. Aborting.")
+        return False
+    logger.info(f"Successfully engineered {engineered_df.shape[1]} features.")
+
+    # 3. Push to Hopsworks
+    logger.info("\nSTEP 3: Pushing new features to Hopsworks...")
+    uploader = HopsworksUploader(
+        api_key=os.getenv("HOPSWORKS_API_KEY", HOPSWORKS_CONFIG.get('api_key')),
+        project_name=HOPSWORKS_CONFIG['project_name']
+    )
+    if not uploader.connect():
+        logger.error("Could not connect to Hopsworks. Aborting.")
+        return False
+    
+    success = uploader.push_features(
+        df=engineered_df,
+        group_name=HOPSWORKS_CONFIG['feature_group_name'],
+        description="Hourly update of AQI and weather features for Multan."
+    )
+    
+    if not success:
+        logger.error("Failed to push features to Hopsworks.")
+        return False
+
+    logger.info("\n=============================================")
+    logger.info("=== AUTOMATED HOURLY RUN COMPLETED SUCCESSFULLY ===")
+    logger.info("=============================================")
+    return True
+
+if __name__ == "__main__":
+    if not run_hourly_update():
+        logger.error("The automated hourly update process failed. Check logs for details.")
+        exit(1) 

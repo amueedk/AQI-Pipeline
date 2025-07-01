@@ -2,12 +2,12 @@
 
 **Serverless AQI Prediction System for Multan with Automated GitHub Actions Pipeline**
 
-A complete serverless system that collects air quality and weather data from Open-Meteo API, engineers features, and stores them in Hopsworks for ML training - all automated with GitHub Actions.
+A complete serverless system that collects air quality and weather data from OpenWeather API, engineers features, and stores them in Hopsworks for ML training - all automated with GitHub Actions.
 
 ## 📋 System Overview
 
 This system provides:
-- ✅ **Automated Data Collection**: Hourly AQI and weather data from Open-Meteo API
+- ✅ **Automated Data Collection**: Hourly AQI and weather data from OpenWeather API
 - ✅ **Feature Engineering**: 150+ ML-ready features with time-series patterns
 - ✅ **GitHub Actions Automation**: Runs every hour automatically
 - ✅ **Hopsworks Integration**: Professional feature store for ML training
@@ -68,7 +68,7 @@ This system provides:
 ```
 AQI-Pipeline/
 ├── config.py                 # Configuration settings
-├── data_collector.py         # Data collection from Open-Meteo API
+├── data_collector.py         # Data collection from OpenWeather API
 ├── feature_engineering.py    # Feature engineering pipeline
 ├── hopsworks_integration.py  # Hopsworks feature store integration
 ├── requirements.txt          # Python dependencies
@@ -90,7 +90,7 @@ AQI-Pipeline/
 - **Timezone**: Asia/Karachi
 
 ### Data Collection
-- **Source**: Open-Meteo API (free, no API key required)
+- **Source**: OpenWeather API (free, no API key required)
 - **Data Frequency**: Hourly
 - **Historical Data**: 14 days
 - **Current Data**: Last 6 hours

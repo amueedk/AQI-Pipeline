@@ -1,6 +1,6 @@
 """
 Data Collector for AQI Data Collection & Feature Engineering
-Fetches air quality and weather data from Open-Meteo API for Multan
+Fetches air quality and weather data from OpenWeather API for Multan
 """
 import requests
 import pandas as pd
@@ -11,392 +11,353 @@ import logging
 from typing import Dict, List, Optional, Tuple
 import json
 import os
-from config import MULTAN_CONFIG, OPEN_METEO_CONFIG, DATA_CONFIG, PATHS
-
-# Import Open-Meteo official client
-try:
-    import openmeteo_requests
-    import requests_cache
-    from retry_requests import retry
-    
-    # Setup the Open-Meteo API client with cache and retry on error
-    cache_session = requests_cache.CachedSession('.cache', expire_after=3600)
-    retry_session = retry(cache_session, retries=5, backoff_factor=0.2)
-    openmeteo = openmeteo_requests.Client(session=retry_session)
-    OPENMETEO_AVAILABLE = True
-except ImportError:
-    OPENMETEO_AVAILABLE = False
-    openmeteo = None
+from config import DATA_CONFIG, PATHS, IQAIR_CONFIG, OPENWEATHER_CONFIG, OPENWEATHER_HISTORY_WEATHER_URL
+import datetime
 
 logger = None
 
-class MultanDataCollector:
+# Ensure logger is always initialized
+if logger is None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(os.path.join(PATHS['logs_dir'], 'data_collector.log')),
+            logging.StreamHandler()
+        ]
+    )
+    logger = logging.getLogger(__name__)
+
+COMMON_POLLUTANTS = [
+    "pm2_5", "pm10", "ozone", "nitrogen_dioxide", "sulphur_dioxide", "carbon_monoxide", "us_aqi"
+]
+COMMON_WEATHER = [
+    "temperature", "humidity", "pressure", "wind_speed", "wind_direction"
+]
+
+# US EPA AQI breakpoints for each pollutant
+AQI_BREAKPOINTS = {
+    "pm2_5": [
+        (0.0, 12.0, 0, 50),
+        (12.1, 35.4, 51, 100),
+        (35.5, 55.4, 101, 150),
+        (55.5, 150.4, 151, 200),
+        (150.5, 250.4, 201, 300),
+        (250.5, 350.4, 301, 400),
+        (350.5, 500.4, 401, 500),
+    ],
+    "pm10": [
+        (0, 54, 0, 50),
+        (55, 154, 51, 100),
+        (155, 254, 101, 150),
+        (255, 354, 151, 200),
+        (355, 424, 201, 300),
+        (425, 504, 301, 400),
+        (505, 604, 401, 500),
+    ],
+    "o3_8h": [
+        (0, 54, 0, 50),
+        (55, 70, 51, 100),
+        (71, 85, 101, 150),
+        (86, 105, 151, 200),
+        (106, 200, 201, 300),
+    ],
+    "o3_1h": [
+        (125, 164, 101, 150),
+        (165, 204, 151, 200),
+        (205, 404, 201, 300),
+        (405, 504, 301, 400),
+        (505, 604, 401, 500),
+    ],
+    "co": [
+        (0.0, 4.4, 0, 50),
+        (4.5, 9.4, 51, 100),
+        (9.5, 12.4, 101, 150),
+        (12.5, 15.4, 151, 200),
+        (15.5, 30.4, 201, 300),
+        (30.5, 40.4, 301, 400),
+        (40.5, 50.4, 401, 500),
+    ],
+    "so2": [
+        (0, 35, 0, 50),
+        (36, 75, 51, 100),
+        (76, 185, 101, 150),
+        (186, 304, 151, 200),
+        (305, 604, 201, 300),
+        (605, 804, 301, 400),
+        (805, 1004, 401, 500),
+    ],
+    "no2": [
+        (0, 53, 0, 50),
+        (54, 100, 51, 100),
+        (101, 360, 101, 150),
+        (361, 649, 151, 200),
+        (650, 1249, 201, 300),
+        (1250, 1649, 301, 400),
+        (1650, 2049, 401, 500),
+    ],
+}
+
+def calc_aqi(conc, breakpoints):
+    """Calculate AQI for a given concentration using US EPA breakpoints"""
+    for C_low, C_high, I_low, I_high in breakpoints:
+        if C_low <= conc <= C_high:
+            return round((I_high - I_low) / (C_high - C_low) * (conc - C_low) + I_low)
+    return None
+
+def compute_overall_aqi(row):
+    """Compute overall AQI from individual pollutant AQIs"""
+    aqi_values = []
+    
+    # Calculate AQI for each pollutant
+    if not pd.isna(row.get("pm2_5")):
+        pm25_aqi = calc_aqi(row["pm2_5"], AQI_BREAKPOINTS["pm2_5"])
+        if pm25_aqi is not None:
+            aqi_values.append(pm25_aqi)
+    
+    if not pd.isna(row.get("pm10")):
+        pm10_aqi = calc_aqi(row["pm10"], AQI_BREAKPOINTS["pm10"])
+        if pm10_aqi is not None:
+            aqi_values.append(pm10_aqi)
+    
+    if not pd.isna(row.get("ozone")):
+        o3_aqi = calc_aqi(row["ozone"], AQI_BREAKPOINTS["o3_8h"])
+        if o3_aqi is not None:
+            aqi_values.append(o3_aqi)
+    
+    if not pd.isna(row.get("carbon_monoxide")):
+        co_aqi = calc_aqi(row["carbon_monoxide"], AQI_BREAKPOINTS["co"])
+        if co_aqi is not None:
+            aqi_values.append(co_aqi)
+    
+    if not pd.isna(row.get("sulphur_dioxide")):
+        so2_aqi = calc_aqi(row["sulphur_dioxide"], AQI_BREAKPOINTS["so2"])
+        if so2_aqi is not None:
+            aqi_values.append(so2_aqi)
+    
+    if not pd.isna(row.get("nitrogen_dioxide")):
+        no2_aqi = calc_aqi(row["nitrogen_dioxide"], AQI_BREAKPOINTS["no2"])
+        if no2_aqi is not None:
+            aqi_values.append(no2_aqi)
+    
+    # Return the maximum AQI value (worst pollutant)
+    return max(aqi_values) if aqi_values else None
+
+class IQAirDataCollector:
     def __init__(self):
-        self.latitude = MULTAN_CONFIG["latitude"]
-        self.longitude = MULTAN_CONFIG["longitude"]
-        self.timezone = MULTAN_CONFIG["timezone"]
-        self.city_name = MULTAN_CONFIG["city_name"]
-        
-        # Create directories if they don't exist
-        for path in PATHS.values():
-            os.makedirs(path, exist_ok=True)
-        
-        # Configure logging after directories are created
-        global logger
-        if logger is None:
-            logging.basicConfig(
-                level=logging.INFO,
-                format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                handlers=[
-                    logging.FileHandler(os.path.join(PATHS['logs_dir'], 'data_collector.log')),
-                    logging.StreamHandler()
-                ]
-            )
-            logger = logging.getLogger(__name__)
-    
-    def fetch_air_quality_data(self, start_date: str, end_date: str) -> pd.DataFrame:
+        self.api_key = IQAIR_CONFIG["api_key"]
+        self.base_url = IQAIR_CONFIG["base_url"]
+        self.city = IQAIR_CONFIG["city"]
+        self.state = IQAIR_CONFIG["state"]
+        self.country = IQAIR_CONFIG["country"]
+
+    def fetch_current_aqi(self) -> pd.DataFrame:
         """
-        Fetch air quality data from Open-Meteo API using official client
+        Fetches the latest AQI (us_aqi) for the configured city from IQAir.
+        Returns a DataFrame with a single row: index is time, column is 'iqair_aqi'.
         """
-        if not OPENMETEO_AVAILABLE:
-            logger.error("Open-Meteo client not available. Please install: pip install openmeteo-requests requests-cache retry-requests")
-            return pd.DataFrame()
-        
-        url = "https://air-quality-api.open-meteo.com/v1/air-quality"
+        url = f"{self.base_url}/city"
         params = {
-            "latitude": self.latitude,
-            "longitude": self.longitude,
-            "hourly": [
-                "pm10", "us_aqi", "pm2_5", "carbon_monoxide", "carbon_dioxide", 
-                "nitrogen_dioxide", "sulphur_dioxide", "ozone", "dust", "uv_index", 
-                "us_aqi_pm2_5", "us_aqi_pm10", "us_aqi_nitrogen_dioxide", 
-                "us_aqi_carbon_monoxide", "us_aqi_ozone", "us_aqi_sulphur_dioxide"
-            ],
-            "timezone": self.timezone,
-            "past_days": 14
+            "city": self.city,
+            "state": self.state,
+            "country": self.country,
+            "key": self.api_key
         }
-        
         try:
-            logger.info(f"Fetching air quality data for past 14 days")
-            responses = openmeteo.weather_api(url, params=params)
-            
-            # Get the first (and only) response
-            response = responses[0]
-            
-            # Process hourly data
-            hourly = response.Hourly()
-            hourly_data = {
-                "time": pd.date_range(
-                    start=pd.to_datetime(hourly.Time(), unit="s"),
-                    end=pd.to_datetime(hourly.TimeEnd(), unit="s"),
-                    freq=pd.Timedelta(seconds=hourly.Interval()),
-                    inclusive="left"
-                )
+            resp = requests.get(url, params=params, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+            if data["status"] != "success":
+                logger.warning(f"IQAir API returned non-success: {data.get('status')}")
+                return pd.DataFrame()
+            pollution = data["data"]["current"]["pollution"]
+            row = {
+                "time": pd.to_datetime(pollution["ts"]),
+                "iqair_aqi": pollution.get("aqius")
             }
-            
-            # Add all hourly variables
-            for i, variable in enumerate(params["hourly"]):
-                hourly_data[variable] = hourly.Variables(i).ValuesAsNumpy()
-            
-            # Convert to DataFrame
-            df = pd.DataFrame(hourly_data)
-            df.set_index('time', inplace=True)
-            
-            # Add metadata
-            df['city'] = self.city_name
-            df['latitude'] = self.latitude
-            df['longitude'] = self.longitude
-            
-            logger.info(f"Successfully fetched {len(df)} air quality records")
+            df = pd.DataFrame([row])
+            df.set_index("time", inplace=True)
             return df
-            
         except Exception as e:
-            logger.error(f"Error fetching air quality data: {e}")
+            logger.warning(f"IQAir API error: {e}")
             return pd.DataFrame()
-    
-    def fetch_weather_data(self, start_date: str, end_date: str) -> pd.DataFrame:
-        """
-        Fetch comprehensive weather data from Open-Meteo API
-        """
-        url = OPEN_METEO_CONFIG["weather_url"]
-        params = {
-            "latitude": self.latitude,
-            "longitude": self.longitude,
-            "hourly": [
-                "temperature_2m", "relative_humidity_2m", "dew_point_2m", 
-                "apparent_temperature", "pressure_msl", "surface_pressure", 
-                "precipitation", "rain", "snowfall", "cloud_cover", 
-                "cloud_cover_low", "cloud_cover_mid", "cloud_cover_high", 
-                "visibility", "wind_speed_10m", "wind_speed_100m", 
-                "wind_direction_10m", "wind_direction_100m", "wind_gusts_10m", 
-                "soil_temperature_0_to_7cm", "soil_temperature_7_to_28cm", 
-                "soil_moisture_0_to_7cm", "soil_moisture_7_to_28cm", 
-                "vapour_pressure_deficit", "evapotranspiration", 
-                "weather_code", "is_day"
-            ],
-            "timezone": self.timezone,
-            "past_days": 14
+
+def fetch_historic_weather(start_unix, end_unix):
+    """
+    Fetch hourly weather data from OpenWeather historic endpoint for Multan.
+    Returns a DataFrame indexed by UTC timestamp.
+    """
+    url = f"{OPENWEATHER_HISTORY_WEATHER_URL}?lat={OPENWEATHER_CONFIG['lat']}&lon={OPENWEATHER_CONFIG['lon']}&type=hour&start={start_unix}&end={end_unix}&appid={OPENWEATHER_CONFIG['api_key']}"
+    resp = requests.get(url, timeout=20)
+    resp.raise_for_status()
+    data = resp.json()
+    rows = []
+    for entry in data.get("list", []):
+        dt = pd.to_datetime(entry["dt"], unit="s", utc=True)
+        main = entry.get("main", {})
+        wind = entry.get("wind", {})
+        row = {
+            "time": dt,
+            "temperature": main.get("temp"),
+            "humidity": main.get("humidity"),
+            "pressure": main.get("pressure"),
+            "wind_speed": wind.get("speed"),
+            "wind_direction": wind.get("deg"),
         }
-        
-        try:
-            logger.info(f"Fetching weather data for past 14 days")
-            responses = openmeteo.weather_api(url, params=params)
-            
-            # Get the first (and only) response
-            response = responses[0]
-            
-            # Process hourly data
-            hourly = response.Hourly()
-            hourly_data = {
-                "time": pd.date_range(
-                    start=pd.to_datetime(hourly.Time(), unit="s"),
-                    end=pd.to_datetime(hourly.TimeEnd(), unit="s"),
-                    freq=pd.Timedelta(seconds=hourly.Interval()),
-                    inclusive="left"
-                )
-            }
-            
-            # Add all hourly variables
-            for i, variable in enumerate(params["hourly"]):
-                hourly_data[variable] = hourly.Variables(i).ValuesAsNumpy()
-            
-            # Convert to DataFrame
-            df = pd.DataFrame(hourly_data)
-            df.set_index('time', inplace=True)
-            
-            # Add metadata
-            df['city'] = self.city_name
-            df['latitude'] = self.latitude
-            df['longitude'] = self.longitude
-            
-            logger.info(f"Successfully fetched {len(df)} weather records")
-            return df
-            
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Error fetching weather data: {e}")
-            return pd.DataFrame()
-        except Exception as e:
-            logger.error(f"Unexpected error in weather data fetch: {e}")
-            return pd.DataFrame()
-    
-    def collect_historical_data(self, days_back: int = None) -> pd.DataFrame:
-        """
-        Collect historical data for the past N days (manual one-time collection)
-        """
-        if days_back is None:
-            days_back = DATA_CONFIG["historical_days"]
-            
-        # Use yesterday as end date to ensure we don't request future dates
-        end_date = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
-        start_date = (datetime.now() - timedelta(days=days_back + 1)).strftime('%Y-%m-%d')
-        
-        logger.info(f"Collecting historical data from {start_date} to {end_date}")
-        
-        # Fetch both air quality and weather data
-        aq_data = self.fetch_air_quality_data(start_date, end_date)
-        weather_data = self.fetch_weather_data(start_date, end_date)
-        
-        # Merge the dataframes
-        if not aq_data.empty and not weather_data.empty:
-            combined_data = pd.concat([aq_data, weather_data], axis=1)
-            # Remove duplicate columns if any
-            combined_data = combined_data.loc[:, ~combined_data.columns.duplicated()]
-            
-            # Save to file
-            filename = f"historical_data_{start_date}_to_{end_date}.csv"
-            filepath = os.path.join(PATHS['data_dir'], filename)
-            combined_data.to_csv(filepath)
-            logger.info(f"Historical data saved to {filepath}")
-            
-            return combined_data
+        rows.append(row)
+    df = pd.DataFrame(rows)
+    df.set_index("time", inplace=True)
+    return df
+
+class OpenWeatherDataCollector:
+    def __init__(self):
+        self.api_key = OPENWEATHER_CONFIG["api_key"]
+        self.base_url = OPENWEATHER_CONFIG["base_url"]
+        self.lat = OPENWEATHER_CONFIG["lat"]
+        self.lon = OPENWEATHER_CONFIG["lon"]
+
+    def fetch_air_pollution(self, start_unix=None, end_unix=None):
+        if start_unix and end_unix:
+            url = f"{self.base_url}/air_pollution/history?lat={self.lat}&lon={self.lon}&start={start_unix}&end={end_unix}&appid={self.api_key}"
         else:
-            logger.error("Failed to fetch data from one or both APIs")
-            return pd.DataFrame()
-    
-    def collect_current_data(self) -> pd.DataFrame:
-        """
-        Collect current data (last few hours) - for automated hourly collection
-        """
-        # Calculate time range for current data (last 6 hours)
-        end_time = datetime.now()
-        start_time = end_time - timedelta(hours=6)
+            url = f"{self.base_url}/air_pollution?lat={self.lat}&lon={self.lon}&appid={self.api_key}"
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        rows = []
+        for entry in data["list"]:
+            row = {"time": pd.to_datetime(entry["dt"], unit="s", utc=True)}
+            row["openweather_aqi"] = entry["main"]["aqi"]  # Keep OpenWeather's simple AQI
+            for k, v in entry["components"].items():
+                row[k] = v
+            rows.append(row)
         
-        # Format dates for API
-        end_date = end_time.strftime('%Y-%m-%d')
-        start_date = start_time.strftime('%Y-%m-%d')
+        df = pd.DataFrame(rows)
+        df.set_index("time", inplace=True)
         
-        logger.info(f"Collecting current data from {start_time} to {end_time}")
+        # Calculate US EPA AQI from pollutant concentrations
+        df["us_aqi"] = df.apply(compute_overall_aqi, axis=1)
         
-        # Use different API parameters for current data
-        url_aq = "https://air-quality-api.open-meteo.com/v1/air-quality"
-        params_aq = {
-            "latitude": self.latitude,
-            "longitude": self.longitude,
-            "hourly": [
-                "pm10", "us_aqi", "pm2_5", "carbon_monoxide", "carbon_dioxide", 
-                "nitrogen_dioxide", "sulphur_dioxide", "ozone", "dust", "uv_index", 
-                "us_aqi_pm2_5", "us_aqi_pm10", "us_aqi_nitrogen_dioxide", 
-                "us_aqi_carbon_monoxide", "us_aqi_ozone", "us_aqi_sulphur_dioxide"
-            ],
-            "timezone": self.timezone,
-            "start_date": start_date,
-            "end_date": end_date
+        return df
+
+    def fetch_weather(self, dt_unix=None):
+        url = f"{self.base_url}/weather?lat={self.lat}&lon={self.lon}&appid={self.api_key}&units=metric"
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        row = {
+            "temperature": data["main"]["temp"],
+            "humidity": data["main"]["humidity"],
+            "pressure": data["main"]["pressure"],
+            "wind_speed": data["wind"]["speed"],
+            "wind_direction": data["wind"]["deg"],
         }
-        
-        url_weather = OPEN_METEO_CONFIG["weather_url"]
-        params_weather = {
-            "latitude": self.latitude,
-            "longitude": self.longitude,
-            "hourly": [
-                "temperature_2m", "relative_humidity_2m", "dew_point_2m", 
-                "apparent_temperature", "pressure_msl", "surface_pressure", 
-                "precipitation", "rain", "snowfall", "cloud_cover", 
-                "cloud_cover_low", "cloud_cover_mid", "cloud_cover_high", 
-                "visibility", "wind_speed_10m", "wind_speed_100m", 
-                "wind_direction_10m", "wind_direction_100m", "wind_gusts_10m", 
-                "soil_temperature_0_to_7cm", "soil_temperature_7_to_28cm", 
-                "soil_moisture_0_to_7cm", "soil_moisture_7_to_28cm", 
-                "vapour_pressure_deficit", "evapotranspiration", 
-                "weather_code", "is_day"
-            ],
-            "timezone": self.timezone,
-            "start_date": start_date,
-            "end_date": end_date
-        }
-        
-        try:
-            # Fetch air quality data
-            logger.info("Fetching current air quality data")
-            responses_aq = openmeteo.weather_api(url_aq, params=params_aq)
-            response_aq = responses_aq[0]
-            
-            # Fetch weather data
-            logger.info("Fetching current weather data")
-            responses_weather = openmeteo.weather_api(url_weather, params=params_weather)
-            response_weather = responses_weather[0]
-            
-            # Process air quality data
-            hourly_aq = response_aq.Hourly()
-            aq_data = {
-                "time": pd.date_range(
-                    start=pd.to_datetime(hourly_aq.Time(), unit="s"),
-                    end=pd.to_datetime(hourly_aq.TimeEnd(), unit="s"),
-                    freq=pd.Timedelta(seconds=hourly_aq.Interval()),
-                    inclusive="left"
-                )
-            }
-            
-            for i, variable in enumerate(params_aq["hourly"]):
-                aq_data[variable] = hourly_aq.Variables(i).ValuesAsNumpy()
-            
-            df_aq = pd.DataFrame(aq_data)
-            df_aq.set_index('time', inplace=True)
-            df_aq['city'] = self.city_name
-            df_aq['latitude'] = self.latitude
-            df_aq['longitude'] = self.longitude
-            
-            # Process weather data
-            hourly_weather = response_weather.Hourly()
-            weather_data = {
-                "time": pd.date_range(
-                    start=pd.to_datetime(hourly_weather.Time(), unit="s"),
-                    end=pd.to_datetime(hourly_weather.TimeEnd(), unit="s"),
-                    freq=pd.Timedelta(seconds=hourly_weather.Interval()),
-                    inclusive="left"
-                )
-            }
-            
-            for i, variable in enumerate(params_weather["hourly"]):
-                weather_data[variable] = hourly_weather.Variables(i).ValuesAsNumpy()
-            
-            df_weather = pd.DataFrame(weather_data)
-            df_weather.set_index('time', inplace=True)
-            df_weather['city'] = self.city_name
-            df_weather['latitude'] = self.latitude
-            df_weather['longitude'] = self.longitude
-            
-            # Combine data
-            combined_data = pd.concat([df_aq, df_weather], axis=1)
-            combined_data = combined_data.loc[:, ~combined_data.columns.duplicated()]
-            
-            # Save current data with timestamp
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M')
-            filename = f"current_data_{timestamp}.csv"
-            filepath = os.path.join(PATHS['data_dir'], filename)
-            combined_data.to_csv(filepath)
-            
-            logger.info(f"Current data saved to {filepath}")
-            return combined_data
-            
-        except Exception as e:
-            logger.error(f"Error fetching current data: {e}")
-            return pd.DataFrame()
+        return row
+
+    def collect_historical_data(self, days_back=14):
+        end_time = int(time.time())
+        start_time = end_time - days_back * 24 * 3600
+        df_pollution = self.fetch_air_pollution(start_unix=start_time, end_unix=end_time)
+        df_weather = fetch_historic_weather(start_unix=start_time, end_unix=end_time)
+        # Merge on timestamp (outer join to keep all pollution records)
+        df_merged = df_pollution.join(df_weather, how="outer")
+        df_merged["city"] = OPENWEATHER_CONFIG["city"]
+        df_merged["latitude"] = self.lat
+        df_merged["longitude"] = self.lon
+        return df_merged
+
+    def collect_current_data(self):
+        """
+        Collect current air pollution and weather data (most recent hour).
+        Returns a DataFrame with current data from OpenWeather APIs.
+        """
+        df_pollution = self.fetch_air_pollution()
+        weather = self.fetch_weather()
+        for k, v in weather.items():
+            df_pollution[k] = v
+        df_pollution["city"] = OPENWEATHER_CONFIG["city"]
+        df_pollution["latitude"] = self.lat
+        df_pollution["longitude"] = self.lon
+        # Note: CSV saving is handled in collect_current_data_with_iqair()
+        return df_pollution
+
+def fetch_iqair_aqi():
+    url = f"https://api.airvisual.com/v2/nearest_city?lat={OPENWEATHER_CONFIG['lat']}&lon={OPENWEATHER_CONFIG['lon']}&key={IQAIR_CONFIG['api_key']}"
+    try:
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        if data["status"] == "success":
+            return data["data"]["current"]["pollution"]["aqius"]
+    except Exception as e:
+        logger.warning(f"IQAir API error: {e}")
+    return None
+
+def collect_current_data_with_iqair():
+    df = OpenWeatherDataCollector().collect_current_data()
+    iqair_aqi = fetch_iqair_aqi()
+    if iqair_aqi is not None:
+        df["iqair_aqi"] = iqair_aqi
+        # Compute absolute deviation
+        if "us_aqi" in df.columns:
+            df["abs_deviation"] = abs(df["us_aqi"] - iqair_aqi)
+    else:
+        df["iqair_aqi"] = None
+        df["abs_deviation"] = None
     
-    def append_to_master_dataset(self, new_data: pd.DataFrame) -> bool:
-        """
-        Append new data to the master dataset
-        """
+    # Save only validation data (much smaller files)
+    validation_cols = ['time', 'openweather_aqi', 'iqair_aqi', 'abs_deviation', 'us_aqi']
+    validation_df = df[validation_cols].copy()
+    
+    # Save to monthly validation file
+    monthly = datetime.datetime.utcnow().strftime('%Y%m')
+    validation_path = f"data/validation_monthly_{monthly}.csv"
+    
+    # Ensure data directory exists
+    os.makedirs("data", exist_ok=True)
+    
+    if os.path.exists(validation_path):
+        # Append to existing monthly validation file
         try:
-            master_file = os.path.join(PATHS['data_dir'], 'master_dataset.csv')
-            
-            if os.path.exists(master_file):
-                # Load existing master dataset
-                master_df = pd.read_csv(master_file, index_col=0, parse_dates=True)
-                
-                # Combine with new data
-                combined_df = pd.concat([master_df, new_data])
-                
-                # Remove duplicates based on timestamp
-                combined_df = combined_df[~combined_df.index.duplicated(keep='last')]
-                
-                # Sort by timestamp
-                combined_df = combined_df.sort_index()
-                
-            else:
-                combined_df = new_data
-            
-            # Save updated master dataset
-            combined_df.to_csv(master_file)
-            logger.info(f"Master dataset updated with {len(new_data)} new records")
-            return True
-            
+            existing_df = pd.read_csv(validation_path, index_col=0, parse_dates=True)
+            combined_df = pd.concat([existing_df, validation_df])
+            # Remove duplicates based on timestamp (keep the latest)
+            combined_df = combined_df[~combined_df.index.duplicated(keep='last')]
+            # Sort by timestamp
+            combined_df = combined_df.sort_index()
         except Exception as e:
-            logger.error(f"Error updating master dataset: {e}")
-            return False
+            logger.warning(f"Error reading existing validation file: {e}. Creating new file.")
+            combined_df = validation_df
+    else:
+        combined_df = validation_df
+    
+    combined_df.to_csv(validation_path)
+    logger.info(f"Validation data appended to monthly file: {validation_path} (total {len(combined_df)} records)")
+    return df
 
 def main():
     """
-    Main function to run data collection
+    Main function to test data collection.
+    Can be used for a one-off historical data collection.
     """
-    collector = MultanDataCollector()
+    collector = OpenWeatherDataCollector()
     
-    # Collect historical data (manual one-time)
-    print("Collecting historical data...")
-    historical_data = collector.collect_historical_data()
-    
-    if not historical_data.empty:
-        print(f"Collected {len(historical_data)} historical records")
-        print(f"Columns: {list(historical_data.columns)}")
-        print(f"Date range: {historical_data.index.min()} to {historical_data.index.max()}")
-        
-        # Show US AQI statistics
-        if 'us_aqi' in historical_data.columns:
-            aqi_stats = historical_data['us_aqi'].describe()
-            print(f"\nUS AQI Statistics:")
-            print(f"Mean: {aqi_stats['mean']:.2f}")
-            print(f"Min: {aqi_stats['min']:.2f}")
-            print(f"Max: {aqi_stats['max']:.2f}")
-            print(f"Std: {aqi_stats['std']:.2f}")
-    
-    # Collect current data (for ongoing collection)
-    print("\nCollecting current data...")
-    current_data = collector.collect_current_data()
-    
-    if not current_data.empty:
-        print(f"Collected {len(current_data)} current records")
-        
-        # Append to master dataset
-        collector.append_to_master_dataset(current_data)
+    # --- For Historical Data Collection ---
+    logger.info("--- Starting Historical Data Collection ---")
+    historical_df = collector.collect_historical_data(days_back=14)
+    if not historical_df.empty:
+        logger.info(f"Successfully collected {len(historical_df)} historical records.")
+    else:
+        logger.error("Historical data collection failed.")
+
+    # --- For Current Data Collection ---
+    logger.info("\n--- Starting Current Data Collection ---")
+    current_df = collector.collect_current_data()
+    if not current_df.empty:
+        logger.info(f"Successfully collected {len(current_df)} current records.")
+    else:
+        logger.warning("No new current data collected.")
+
 
 if __name__ == "__main__":
     main() 

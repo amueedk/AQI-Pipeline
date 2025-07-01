@@ -12,6 +12,97 @@ from config import PATHS, FEATURE_CONFIG
 
 logger = None
 
+# US EPA AQI breakpoints for each pollutant
+AQI_BREAKPOINTS = {
+    "pm2_5": [
+        (0.0, 12.0, 0, 50),
+        (12.1, 35.4, 51, 100),
+        (35.5, 55.4, 101, 150),
+        (55.5, 150.4, 151, 200),
+        (150.5, 250.4, 201, 300),
+        (250.5, 350.4, 301, 400),
+        (350.5, 500.4, 401, 500),
+    ],
+    "pm10": [
+        (0, 54, 0, 50),
+        (55, 154, 51, 100),
+        (155, 254, 101, 150),
+        (255, 354, 151, 200),
+        (355, 424, 201, 300),
+        (425, 504, 301, 400),
+        (505, 604, 401, 500),
+    ],
+    "o3_8h": [
+        (0, 54, 0, 50),
+        (55, 70, 51, 100),
+        (71, 85, 101, 150),
+        (86, 105, 151, 200),
+        (106, 200, 201, 300),
+    ],
+    "o3_1h": [
+        (125, 164, 101, 150),
+        (165, 204, 151, 200),
+        (205, 404, 201, 300),
+        (405, 504, 301, 400),
+        (505, 604, 401, 500),
+    ],
+    "co": [
+        (0.0, 4.4, 0, 50),
+        (4.5, 9.4, 51, 100),
+        (9.5, 12.4, 101, 150),
+        (12.5, 15.4, 151, 200),
+        (15.5, 30.4, 201, 300),
+        (30.5, 40.4, 301, 400),
+        (40.5, 50.4, 401, 500),
+    ],
+    "so2": [
+        (0, 35, 0, 50),
+        (36, 75, 51, 100),
+        (76, 185, 101, 150),
+        (186, 304, 151, 200),
+        (305, 604, 201, 300),
+        (605, 804, 301, 400),
+        (805, 1004, 401, 500),
+    ],
+    "no2": [
+        (0, 53, 0, 50),
+        (54, 100, 51, 100),
+        (101, 360, 101, 150),
+        (361, 649, 151, 200),
+        (650, 1249, 201, 300),
+        (1250, 1649, 301, 400),
+        (1650, 2049, 401, 500),
+    ],
+}
+
+def calc_aqi(conc, breakpoints):
+    for C_low, C_high, I_low, I_high in breakpoints:
+        if C_low <= conc <= C_high:
+            return round((I_high - I_low) / (C_high - C_low) * (conc - C_low) + I_low)
+    return None
+
+def compute_all_aqi(row):
+    aqi_values = {}
+    if not pd.isna(row.get("pm2_5")):
+        aqi_values["pm2_5_aqi"] = calc_aqi(row["pm2_5"], AQI_BREAKPOINTS["pm2_5"])
+    if not pd.isna(row.get("pm10")):
+        aqi_values["pm10_aqi"] = calc_aqi(row["pm10"], AQI_BREAKPOINTS["pm10"])
+    if not pd.isna(row.get("ozone")):
+        aqi_values["o3_aqi"] = calc_aqi(row["ozone"], AQI_BREAKPOINTS["o3_8h"])
+    if not pd.isna(row.get("carbon_monoxide")):
+        aqi_values["co_aqi"] = calc_aqi(row["carbon_monoxide"], AQI_BREAKPOINTS["co"])
+    if not pd.isna(row.get("sulphur_dioxide")):
+        aqi_values["so2_aqi"] = calc_aqi(row["sulphur_dioxide"], AQI_BREAKPOINTS["so2"])
+    if not pd.isna(row.get("nitrogen_dioxide")):
+        aqi_values["no2_aqi"] = calc_aqi(row["nitrogen_dioxide"], AQI_BREAKPOINTS["no2"])
+    return aqi_values
+
+def compute_overall_aqi(row):
+    aqi_values = compute_all_aqi(row)
+    if aqi_values:
+        return max([v for v in aqi_values.values() if v is not None])
+    return None
+
 class AQIFeatureEngineer:
     def __init__(self):
         self.target_column = FEATURE_CONFIG["target_column"]
@@ -106,59 +197,31 @@ class AQIFeatureEngineer:
     
     def create_weather_derived_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Create derived features from weather data
+        Create derived features from weather data (OpenWeather variable names only)
         """
         df = df.copy()
-        
         # Temperature features
-        if 'temperature_2m' in df.columns:
-            df['temp_squared'] = df['temperature_2m'] ** 2
-            df['temp_cubed'] = df['temperature_2m'] ** 3
-            
-            # Temperature change rate
-            df['temp_change_rate'] = df['temperature_2m'].pct_change(1)
-            
-            # Temperature extremes
-            df['is_hot'] = (df['temperature_2m'] > 35).astype(int)
-            df['is_cold'] = (df['temperature_2m'] < 10).astype(int)
-        
+        if 'temperature' in df.columns:
+            df['temp_squared'] = df['temperature'] ** 2
+            df['temp_cubed'] = df['temperature'] ** 3
+            df['temp_change_rate'] = df['temperature'].pct_change(1)
+            df['is_hot'] = (df['temperature'] > 35).astype(int)
+            df['is_cold'] = (df['temperature'] < 10).astype(int)
         # Humidity features
-        if 'relative_humidity_2m' in df.columns:
-            df['humidity_squared'] = df['relative_humidity_2m'] ** 2
-            df['is_high_humidity'] = (df['relative_humidity_2m'] > 80).astype(int)
-            df['is_low_humidity'] = (df['relative_humidity_2m'] < 30).astype(int)
-        
+        if 'humidity' in df.columns:
+            df['humidity_squared'] = df['humidity'] ** 2
+            df['is_high_humidity'] = (df['humidity'] > 80).astype(int)
+            df['is_low_humidity'] = (df['humidity'] < 30).astype(int)
         # Wind features
-        if 'wind_speed_10m' in df.columns:
-            df['wind_speed_squared'] = df['wind_speed_10m'] ** 2
-            df['is_high_wind'] = (df['wind_speed_10m'] > 20).astype(int)
-            df['is_calm'] = (df['wind_speed_10m'] < 5).astype(int)
-        
+        if 'wind_speed' in df.columns:
+            df['wind_speed_squared'] = df['wind_speed'] ** 2
+            df['is_high_wind'] = (df['wind_speed'] > 20).astype(int)
+            df['is_calm'] = (df['wind_speed'] < 5).astype(int)
         # Pressure features
-        if 'pressure_msl' in df.columns:
-            df['pressure_change_rate'] = df['pressure_msl'].pct_change(1)
-            df['is_low_pressure'] = (df['pressure_msl'] < 1010).astype(int)
-            df['is_high_pressure'] = (df['pressure_msl'] > 1020).astype(int)
-        
-        # Precipitation features
-        if 'precipitation' in df.columns:
-            df['is_raining'] = (df['precipitation'] > 0).astype(int)
-            df['rain_intensity'] = pd.cut(df['precipitation'], 
-                                        bins=[0, 0.1, 2.5, 7.5, 50, 1000], 
-                                        labels=[0, 1, 2, 3, 4], 
-                                        include_lowest=True).astype(int)
-        
-        # Cloud cover features
-        if 'cloud_cover' in df.columns:
-            df['is_cloudy'] = (df['cloud_cover'] > 80).astype(int)
-            df['is_clear'] = (df['cloud_cover'] < 20).astype(int)
-        
-        # UV index features
-        if 'uv_index' in df.columns:
-            df['is_high_uv'] = (df['uv_index'] > 8).astype(int)
-            df['is_low_uv'] = (df['uv_index'] < 3).astype(int)
-        
-        logger.info("Created weather-derived features")
+        if 'pressure' in df.columns:
+            df['pressure_change_rate'] = df['pressure'].pct_change(1)
+            df['is_low_pressure'] = (df['pressure'] < 1010).astype(int)
+            df['is_high_pressure'] = (df['pressure'] > 1020).astype(int)
         return df
     
     def create_pollutant_derived_features(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -222,163 +285,137 @@ class AQIFeatureEngineer:
         df = df.copy()
         
         # Temperature-Humidity interaction
-        if 'temperature_2m' in df.columns and 'relative_humidity_2m' in df.columns:
-            df['temp_humidity_interaction'] = df['temperature_2m'] * df['relative_humidity_2m']
+        if 'temperature' in df.columns and 'humidity' in df.columns:
+            df['temp_humidity_interaction'] = df['temperature'] * df['humidity']
         
         # Temperature-Wind interaction
-        if 'temperature_2m' in df.columns and 'wind_speed_10m' in df.columns:
-            df['temp_wind_interaction'] = df['temperature_2m'] * df['wind_speed_10m']
+        if 'temperature' in df.columns and 'wind_speed' in df.columns:
+            df['temp_wind_interaction'] = df['temperature'] * df['wind_speed']
         
         # PM2.5-Temperature interaction
-        if 'pm2_5' in df.columns and 'temperature_2m' in df.columns:
-            df['pm2_5_temp_interaction'] = df['pm2_5'] * df['temperature_2m']
+        if 'pm2_5' in df.columns and 'temperature' in df.columns:
+            df['pm2_5_temp_interaction'] = df['pm2_5'] * df['temperature']
         
         # PM2.5-Humidity interaction
-        if 'pm2_5' in df.columns and 'relative_humidity_2m' in df.columns:
-            df['pm2_5_humidity_interaction'] = df['pm2_5'] * df['relative_humidity_2m']
+        if 'pm2_5' in df.columns and 'humidity' in df.columns:
+            df['pm2_5_humidity_interaction'] = df['pm2_5'] * df['humidity']
         
         # Wind-PM2.5 interaction
-        if 'wind_speed_10m' in df.columns and 'pm2_5' in df.columns:
-            df['wind_pm2_5_interaction'] = df['wind_speed_10m'] * df['pm2_5']
+        if 'wind_speed' in df.columns and 'pm2_5' in df.columns:
+            df['wind_pm2_5_interaction'] = df['wind_speed'] * df['pm2_5']
         
         logger.info("Created interaction features")
         return df
     
     def handle_missing_values(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Handle missing values in the dataset
+        Handle missing values in the dataset using a forward-fill strategy,
+        which is suitable for time-series data. Also handles infinite values.
         """
         df = df.copy()
         
-        # Forward fill for time series data
-        df = df.fillna(method='ffill')
+        # Replace infinite values with NaN first
+        df.replace([np.inf, -np.inf], np.nan, inplace=True)
         
-        # Backward fill for remaining NaNs
-        df = df.fillna(method='bfill')
+        nan_count_before = df.isnull().sum().sum()
+        if nan_count_before > 0:
+            logger.info(f"Found {nan_count_before} missing or infinite values to handle.")
+
+        # Step 1: Forward-fill
+        df.ffill(inplace=True)
         
-        # For remaining NaNs, use median for numeric columns
-        numeric_columns = df.select_dtypes(include=[np.number]).columns
-        df[numeric_columns] = df[numeric_columns].fillna(df[numeric_columns].median())
+        # Step 2: Backward-fill for any NaNs remaining at the start of the series
+        df.bfill(inplace=True)
+
+        # Step 3: Fill any remaining NaNs (if a whole column was NaN) with 0
+        df.fillna(0, inplace=True)
         
-        logger.info(f"Handled missing values. Remaining NaNs: {df.isnull().sum().sum()}")
+        nan_count_after = df.isnull().sum().sum()
+        if nan_count_after > 0:
+            logger.warning(f"There are still {nan_count_after} missing values after handling.")
+        else:
+            logger.info("Successfully handled all missing values.")
+            
         return df
     
     def engineer_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Complete feature engineering pipeline
+        Run the full feature engineering pipeline on a dataframe
+        Computes AQI for each pollutant and overall AQI using OpenWeather data.
+        Excludes IQAir and abs_deviation fields from features.
         """
-        logger.info("Starting feature engineering pipeline")
+        logger.info(f"Starting feature engineering on dataframe with {len(df)} rows.")
         
-        # Remove non-numeric columns that shouldn't be processed
-        exclude_cols = ['city', 'latitude', 'longitude']
-        df_clean = df.drop(columns=[col for col in exclude_cols if col in df.columns])
+        # Ensure index is datetime
+        if not isinstance(df.index, pd.DatetimeIndex):
+            df.index = pd.to_datetime(df.index)
+
+        # Compute AQI for each pollutant and overall AQI
+        aqi_cols = ["pm2_5", "pm10", "ozone", "carbon_monoxide", "sulphur_dioxide", "nitrogen_dioxide"]
+        for col in aqi_cols:
+            aqi_name = f"{col}_aqi"
+            df[aqi_name] = df.apply(lambda row: calc_aqi(row[col], AQI_BREAKPOINTS[col if col not in ["ozone", "carbon_monoxide", "sulphur_dioxide", "nitrogen_dioxide"] else {"ozone": "o3_8h", "carbon_monoxide": "co", "sulphur_dioxide": "so2", "nitrogen_dioxide": "no2"}[col]]) if not pd.isna(row.get(col)) else None, axis=1)
+        df["overall_aqi"] = df.apply(compute_overall_aqi, axis=1)
+
+        # The rest of the pipeline (time features, lags, etc.)
+        engineered_df = self.create_time_features(df)
+        engineered_df = self.create_lag_features(engineered_df)
+        engineered_df = self.create_weather_derived_features(engineered_df)
+        engineered_df = self.create_pollutant_derived_features(engineered_df)
+        engineered_df = self.create_interaction_features(engineered_df)
+        engineered_df = self.handle_missing_values(engineered_df)
         
-        # Create all feature types
-        df_clean = self.create_time_features(df_clean)
-        df_clean = self.create_lag_features(df_clean)
-        df_clean = self.create_weather_derived_features(df_clean)
-        df_clean = self.create_pollutant_derived_features(df_clean)
-        df_clean = self.create_interaction_features(df_clean)
-        
-        # Handle missing values
-        df_clean = self.handle_missing_values(df_clean)
-        
-        # Remove infinite values
-        df_clean = df_clean.replace([np.inf, -np.inf], np.nan)
-        df_clean = df_clean.fillna(df_clean.median())
-        
-        # Add back the original metadata columns
-        for col in exclude_cols:
-            if col in df.columns:
-                df_clean[col] = df[col]
-        
-        logger.info(f"Feature engineering completed. Final shape: {df_clean.shape}")
-        return df_clean
+        logger.info(f"Feature engineering complete. Final dataframe shape: {engineered_df.shape}")
+        return engineered_df
     
     def get_feature_columns(self, df: pd.DataFrame, exclude_target: bool = True) -> List[str]:
         """
-        Get list of feature columns (excluding target and metadata)
+        Get the list of feature column names from the dataframe.
+        Excludes non-feature columns and optionally the target column.
+        Excludes IQAir and abs_deviation fields.
         """
-        exclude_cols = [
-            self.target_column,
-            'city', 'latitude', 'longitude',
-            'weather_icon', 'weather_description'
-        ]
-        
+        cols_to_exclude = ['city', 'latitude', 'longitude', 'iqair_aqi', 'abs_deviation']
         if exclude_target:
-            feature_cols = [col for col in df.columns if col not in exclude_cols]
-        else:
-            feature_cols = [col for col in df.columns if col not in ['city', 'latitude', 'longitude', 'weather_icon', 'weather_description']]
-        
+            cols_to_exclude.append(self.target_column)
+            
+        feature_cols = [col for col in df.columns if col not in cols_to_exclude]
         return feature_cols
-    
-    def update_master_features(self, master_data_file: str = None) -> bool:
-        """
-        Update master features dataset with latest data
-        """
-        try:
-            if master_data_file is None:
-                master_data_file = os.path.join(PATHS['data_dir'], 'master_dataset.csv')
-            
-            if not os.path.exists(master_data_file):
-                logger.error(f"Master dataset not found: {master_data_file}")
-                return False
-            
-            # Load master dataset
-            df = pd.read_csv(master_data_file, index_col=0, parse_dates=True)
-            logger.info(f"Loaded master dataset with {len(df)} records")
-            
-            # Engineer features
-            df_engineered = self.engineer_features(df)
-            
-            # Save engineered features
-            output_file = os.path.join(PATHS['data_dir'], 'master_features.csv')
-            df_engineered.to_csv(output_file)
-            
-            logger.info(f"Master features updated and saved to {output_file}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error updating master features: {e}")
-            return False
 
 def main():
     """
-    Main function to test feature engineering
+    Main function to test feature engineering.
+    This function will:
+    1. Collect fresh historical data using the DataCollector.
+    2. Run feature engineering on that data.
+    3. Save the engineered features to a CSV file for inspection.
     """
-    # Check for master dataset
-    master_file = os.path.join(PATHS['data_dir'], 'master_dataset.csv')
+    from data_collector import OpenWeatherDataCollector
+
+    # 1. Collect data
+    logger.info("--- Main Test: Running Data Collector ---")
+    collector = OpenWeatherDataCollector()
+    # Fetch a smaller range for a quick test
+    raw_data_df = collector.collect_historical_data(days_back=3) 
     
-    if os.path.exists(master_file):
-        print(f"Found master dataset: {master_file}")
-        
-        # Initialize feature engineer
-        engineer = AQIFeatureEngineer()
-        
-        # Update master features
-        success = engineer.update_master_features(master_file)
-        
-        if success:
-            # Load and show statistics
-            features_file = os.path.join(PATHS['data_dir'], 'master_features.csv')
-            df_engineered = pd.read_csv(features_file, index_col=0, parse_dates=True)
-            
-            print(f"\nFeature engineering completed!")
-            print(f"Master features shape: {df_engineered.shape}")
-            print(f"Number of features: {len(engineer.get_feature_columns(df_engineered))}")
-            
-            # Show US AQI statistics if available
-            if 'us_aqi' in df_engineered.columns:
-                aqi_stats = df_engineered['us_aqi'].describe()
-                print(f"\nUS AQI Statistics:")
-                print(f"Mean: {aqi_stats['mean']:.2f}")
-                print(f"Min: {aqi_stats['min']:.2f}")
-                print(f"Max: {aqi_stats['max']:.2f}")
-                print(f"Std: {aqi_stats['std']:.2f}")
-        else:
-            print("Feature engineering failed")
+    if raw_data_df.empty:
+        logger.error("--- Main Test: Data collection failed. Aborting feature engineering test. ---")
+        return
+
+    # 2. Engineer features
+    logger.info("--- Main Test: Running Feature Engineer ---")
+    engineer = AQIFeatureEngineer()
+    engineered_df = engineer.engineer_features(raw_data_df)
+
+    if not engineered_df.empty:
+        # 3. Save for inspection
+        output_path = os.path.join(PATHS['temp_dir'], 'test_engineered_features.csv')
+        engineered_df.to_csv(output_path)
+        logger.info(f"--- Main Test: Successfully engineered features and saved to {output_path} ---")
+        logger.info(f"Engineered DataFrame shape: {engineered_df.shape}")
+        logger.info(f"First 5 rows:\n{engineered_df.head()}")
     else:
-        print("No master dataset found. Please run data_collector.py first to collect data.")
+        logger.error("--- Main Test: Feature engineering failed. ---")
+
 
 if __name__ == "__main__":
-    main() 
+    main()

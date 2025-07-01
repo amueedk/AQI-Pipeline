@@ -14,13 +14,6 @@ MULTAN_CONFIG = {
     "city_name": "Multan"
 }
 
-# Open-Meteo API Configuration
-OPEN_METEO_CONFIG = {
-    "base_url": "https://api.open-meteo.com/v1",
-    "air_quality_url": "https://api.open-meteo.com/v1/air-quality",
-    "weather_url": "https://api.open-meteo.com/v1/forecast"
-}
-
 # Data Collection Configuration
 DATA_CONFIG = {
     "historical_days": 14,  # Days of historical data to collect initially
@@ -30,7 +23,7 @@ DATA_CONFIG = {
 
 # Feature Engineering Configuration
 FEATURE_CONFIG = {
-    "target_column": "us_aqi",  # Target variable for future ML models
+    "target_column": "us_aqi",  # Target variable for future ML models (calculated US EPA AQI)
     "lag_hours": [1, 2, 3, 6, 12, 24, 48, 72],  # Lag features to create
     "rolling_windows": [3, 6, 12, 24]  # Rolling statistics windows
 }
@@ -63,4 +56,27 @@ HOPSWORKS_CONFIG = {
     "api_key": os.getenv("HOPSWORKS_API_KEY", ""),  # Will be empty if not set
     "project_name": "AQIMultan",  # Your actual Hopsworks project name
     "feature_group_name": "multan_aqi_features"  # Feature group name
-} 
+}
+
+# IQAir API Configuration
+IQAIR_CONFIG = {
+    "api_key": os.getenv("IQAIR_API_KEY", ""),
+    "base_url": "https://api.airvisual.com/v2",
+    "city": "Multan",
+    "state": "Punjab",
+    "country": "Pakistan"
+}
+
+# OpenWeather API Configuration
+OPENWEATHER_CONFIG = {
+    "api_key": os.getenv("OPENWEATHER_API_KEY", ""),
+    "base_url": "https://api.openweathermap.org/data/2.5",
+    "lat": 30.1575,
+    "lon": 71.5249,
+    "city": "Multan",
+    "state": "Punjab",
+    "country": "Pakistan"
+}
+
+# Add OpenWeather historic weather endpoint 
+OPENWEATHER_HISTORY_WEATHER_URL = "http://history.openweathermap.org/data/2.5/history/city" 
