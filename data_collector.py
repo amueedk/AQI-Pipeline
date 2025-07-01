@@ -306,8 +306,15 @@ def collect_current_data_with_iqair():
         df["abs_deviation"] = None
     
     # Save only validation data (much smaller files)
+    # Reset index to make 'time' a column again
+    df_reset = df.reset_index()
     validation_cols = ['time', 'openweather_aqi', 'iqair_aqi', 'abs_deviation', 'us_aqi']
-    validation_df = df[validation_cols].copy()
+    # Only include columns that exist
+    available_cols = [col for col in validation_cols if col in df_reset.columns]
+    logger.info(f"DEBUG: Available columns in DataFrame: {list(df_reset.columns)}")
+    logger.info(f"DEBUG: Validation columns requested: {validation_cols}")
+    logger.info(f"DEBUG: Validation columns available: {available_cols}")
+    validation_df = df_reset[available_cols].copy()
     
     # Save to monthly validation file
     monthly = datetime.datetime.utcnow().strftime('%Y%m')

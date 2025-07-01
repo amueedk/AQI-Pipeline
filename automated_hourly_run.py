@@ -72,7 +72,12 @@ def run_hourly_update():
     # Extract only AQI validation columns
     raw_df_reset = raw_df.reset_index()
     validation_cols = ['time', 'openweather_aqi', 'us_aqi', 'iqair_aqi', 'abs_deviation']
-    validation_df = raw_df_reset[validation_cols].copy()
+    # Only include columns that exist
+    available_cols = [col for col in validation_cols if col in raw_df_reset.columns]
+    logger.info(f"DEBUG: Available columns in DataFrame: {list(raw_df_reset.columns)}")
+    logger.info(f"DEBUG: Validation columns requested: {validation_cols}")
+    logger.info(f"DEBUG: Validation columns available: {available_cols}")
+    validation_df = raw_df_reset[available_cols].copy()
     
     # Check if file exists and append, or create new file
     if os.path.exists(validation_path):

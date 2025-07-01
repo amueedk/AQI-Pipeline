@@ -78,10 +78,7 @@ OPENWEATHER_CONFIG = {
     "country": "Pakistan"
 }
 
-# Debug: Print API key status (without revealing the actual keys)
-print(f"DEBUG: OPENWEATHER_API_KEY loaded: {'Yes' if OPENWEATHER_CONFIG['api_key'] else 'No'}")
-print(f"DEBUG: IQAIR_API_KEY loaded: {'Yes' if IQAIR_CONFIG['api_key'] else 'No'}")
-print(f"DEBUG: HOPSWORKS_API_KEY loaded: {'Yes' if HOPSWORKS_CONFIG['api_key'] else 'No'}")
+
 
 # Add OpenWeather historic weather endpoint 
 OPENWEATHER_HISTORY_WEATHER_URL = "http://history.openweathermap.org/data/2.5/history/city" 
