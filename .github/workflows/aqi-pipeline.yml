@@ -37,6 +37,8 @@ jobs:
           python automated_hourly_run.py
         env:
           HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
+          OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
+          IQAIR_API_KEY: ${{ secrets.IQAIR_API_KEY }}
 
       - name: Commit and push AQI validation data files
         run: |

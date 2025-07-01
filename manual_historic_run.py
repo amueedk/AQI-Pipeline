@@ -37,6 +37,23 @@ def run_manual_backfill():
     logger.info("=================================================")
     logger.info("=== STARTING MANUAL HISTORICAL DATA BACKFILL ===")
     logger.info("=================================================")
+    
+    # Debug: Check API keys are loaded
+    logger.info("DEBUG: Checking API keys...")
+    openweather_key = os.getenv("OPENWEATHER_API_KEY")
+    iqair_key = os.getenv("IQAIR_API_KEY")
+    hopsworks_key = os.getenv("HOPSWORKS_API_KEY")
+    
+    logger.info(f"DEBUG: OPENWEATHER_API_KEY present: {'Yes' if openweather_key else 'No'}")
+    logger.info(f"DEBUG: IQAIR_API_KEY present: {'Yes' if iqair_key else 'No'}")
+    logger.info(f"DEBUG: HOPSWORKS_API_KEY present: {'Yes' if hopsworks_key else 'No'}")
+    
+    if not openweather_key:
+        logger.error("ERROR: OPENWEATHER_API_KEY environment variable is not set!")
+    if not iqair_key:
+        logger.warning("WARNING: IQAIR_API_KEY environment variable is not set!")
+    if not hopsworks_key:
+        logger.error("ERROR: HOPSWORKS_API_KEY environment variable is not set!")
 
     # 1. Collect Historical Data
     logger.info("STEP 1: Collecting historical data for the last 14 days (OpenWeather only)...")
