@@ -44,6 +44,7 @@ You need to add the following secrets to your repository:
 - **401 Unauthorized Errors**: API keys are now properly passed to GitHub Actions
 - **403 Forbidden Errors**: The PAT allows GitHub Actions to push commits to the repository
 - **Data Persistence**: AQI validation data can now be committed and pushed back to the repository
+- **Permission Issues**: Explicit `contents: write` permissions ensure GitHub Actions can modify the repository
 
 ## Workflow Files Updated
 
@@ -57,6 +58,11 @@ The following workflow files have been updated to use the PAT:
 1. After adding all secrets, trigger a manual workflow run
 2. Check the logs for the debug messages showing API key status
 3. Verify that data files are successfully committed and pushed
+
+## Important Notes
+
+- **Branch Name**: The workflows are configured for the `main` branch. If your default branch is different (e.g., `master`), update `HEAD:main` to `HEAD:your-branch-name` in the git push commands.
+- **Permissions**: Both workflows now include explicit `permissions: contents: write` to ensure GitHub Actions can modify the repository.
 
 ## Security Notes
 
