@@ -365,7 +365,13 @@ class AQIFeatureEngineer:
         engineered_df = self.create_interaction_features(engineered_df)
         engineered_df = self.handle_missing_values(engineered_df)
         
+        # Convert numeric columns to float64 to match Hopsworks schema
+        numeric_cols = engineered_df.select_dtypes(include=['int64', 'float64']).columns
+        for col in numeric_cols:
+            engineered_df[col] = engineered_df[col].astype('float64')
+        
         logger.info(f"Feature engineering complete. Final dataframe shape: {engineered_df.shape}")
+        logger.info(f"Converted {len(numeric_cols)} numeric columns to float64 for Hopsworks compatibility")
         return engineered_df
     
     def get_feature_columns(self, df: pd.DataFrame, exclude_target: bool = True) -> List[str]:
