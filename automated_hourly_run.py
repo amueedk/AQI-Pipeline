@@ -65,11 +65,17 @@ def run_hourly_update():
     
     # Create copy for Hopsworks (without IQAir columns to match historic schema)
     raw_df = raw_df_with_iqair.copy()
-    columns_to_remove = ['iqair_aqi', 'abs_deviation']
+    columns_to_remove = ['iqair_aqi', 'abs_deviation', 'openweather_aqi']
     for col in columns_to_remove:
         if col in raw_df.columns:
             raw_df = raw_df.drop(columns=[col])
             logger.info(f"Removed column '{col}' for Hopsworks to match historic schema")
+
+    # Explicitly cast all numerics to float64
+    numeric_cols = raw_df.select_dtypes(include=['int64', 'float64']).columns
+    for col in numeric_cols:
+        raw_df[col] = raw_df[col].astype('float64')
+    logger.info(f"Casted {len(numeric_cols)} numeric columns to float64 for Hopsworks consistency")
 
     # Save AQI validation data as CSV (only AQI data for comparison)
     import datetime

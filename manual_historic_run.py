@@ -81,6 +81,20 @@ def run_manual_backfill():
     # 2. Engineer Features
     logger.info("\nSTEP 2: Engineering features...")
     engineer = AQIFeatureEngineer()
+
+    # Remove validation-only columns if present
+    columns_to_remove = ['iqair_aqi', 'abs_deviation', 'openweather_aqi']
+    for col in columns_to_remove:
+        if col in raw_df.columns:
+            raw_df = raw_df.drop(columns=[col])
+            logger.info(f"Removed column '{col}' for Hopsworks consistency")
+
+    # Explicitly cast all numerics to float64
+    numeric_cols = raw_df.select_dtypes(include=['int64', 'float64']).columns
+    for col in numeric_cols:
+        raw_df[col] = raw_df[col].astype('float64')
+    logger.info(f"Casted {len(numeric_cols)} numeric columns to float64 for Hopsworks consistency")
+
     engineered_df = engineer.engineer_features(raw_df)
     if engineered_df.empty:
         logger.error("Feature engineering resulted in an empty DataFrame. Aborting.")
