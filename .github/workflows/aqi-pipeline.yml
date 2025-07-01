@@ -25,6 +25,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Create necessary directories
+        run: |
+          mkdir -p logs
+          mkdir -p data
+
       - name: Run automated hourly update script
         # This script handles data collection, feature engineering,
         # and pushing to Hopsworks.
