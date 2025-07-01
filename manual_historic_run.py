@@ -101,8 +101,11 @@ def run_manual_backfill():
         return False
     logger.info(f"Successfully engineered {engineered_df.shape[1]} features.")
 
-    # Debug: Print CO and CO AQI columns before upload
-    print(engineered_df[['carbon_monoxide', 'carbon_monoxide_aqi']].head(20))
+    # Debug: Print all columns and all AQI columns before upload
+    print("Engineered DataFrame columns:")
+    print(engineered_df.columns.tolist())
+    print("\nFirst 20 rows of all AQI columns:")
+    print(engineered_df.filter(like='_aqi').head(20))
 
     # 3. Push to Hopsworks
     logger.info("\nSTEP 3: Pushing features to Hopsworks...")
