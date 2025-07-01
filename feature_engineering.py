@@ -98,10 +98,16 @@ def compute_all_aqi(row):
     return aqi_values
 
 def compute_overall_aqi(row):
-    aqi_values = compute_all_aqi(row)
-    if aqi_values:
-        return max([v for v in aqi_values.values() if v is not None])
-    return None
+    aqi_values = {
+        "pm2_5_aqi": row.get("pm2_5_aqi"),
+        "pm10_aqi": row.get("pm10_aqi"),
+        "ozone_aqi": row.get("o3_aqi"),
+        "carbon_monoxide_aqi": row.get("co_aqi"),
+        "sulphur_dioxide_aqi": row.get("so2_aqi"),
+        "nitrogen_dioxide_aqi": row.get("no2_aqi"),
+    }
+    valid_values = [v for v in aqi_values.values() if pd.notna(v)]
+    return max(valid_values) if valid_values else None
 
 class AQIFeatureEngineer:
     def __init__(self):
@@ -403,6 +409,11 @@ class AQIFeatureEngineer:
 
         # Drop raw time columns if present
         for col in ['hour', 'month', 'day', 'day_of_week', 'day_of_year', 'week_of_year']:
+            if col in engineered_df.columns:
+                engineered_df = engineered_df.drop(columns=[col])
+
+        # Drop intermediate unit conversion columns if present
+        for col in ['carbon_monoxide_ppm', 'nitrogen_dioxide_ppb', 'ozone_ppb', 'sulphur_dioxide_ppb']:
             if col in engineered_df.columns:
                 engineered_df = engineered_df.drop(columns=[col])
 
