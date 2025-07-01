@@ -32,6 +32,19 @@ jobs:
           mkdir -p logs
           mkdir -p data
 
+      - name: Download previous validation CSV (if exists)
+        uses: actions/download-artifact@v4
+        with:
+          name: aqi-validation-csv
+          path: data
+        continue-on-error: true
+
+      - name: Pull latest data from repo
+        run: |
+          git config --global user.email "action@github.com"
+          git config --global user.name "GitHub Action"
+          git pull origin main --allow-unrelated-histories --rebase
+
       - name: Run automated hourly update script
         # This script handles data collection, feature engineering,
         # and pushing to Hopsworks.
@@ -41,6 +54,12 @@ jobs:
           HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
           OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
           IQAIR_API_KEY: ${{ secrets.IQAIR_API_KEY }}
+
+      - name: Upload updated validation CSV
+        uses: actions/upload-artifact@v4
+        with:
+          name: aqi-validation-csv
+          path: data/aqi_validation_current_*.csv
 
       - name: Commit and push AQI validation data files
         run: |
