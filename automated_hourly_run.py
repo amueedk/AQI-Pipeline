@@ -57,11 +57,19 @@ def run_hourly_update():
 
     # 1. Collect Current Data (OpenWeather + IQAir AQI for comparison)
     logger.info("STEP 1: Collecting current data (OpenWeather + IQAir AQI for comparison)...")
-    raw_df = collect_current_data_with_iqair()
-    if raw_df.empty:
+    raw_df_with_iqair = collect_current_data_with_iqair()
+    if raw_df_with_iqair.empty:
         logger.warning("No new data collected in the last hour. Exiting gracefully.")
         return True
-    logger.info(f"Successfully collected {len(raw_df)} new records.")
+    logger.info(f"Successfully collected {len(raw_df_with_iqair)} new records.")
+    
+    # Create copy for Hopsworks (without IQAir columns to match historic schema)
+    raw_df = raw_df_with_iqair.copy()
+    columns_to_remove = ['iqair_aqi', 'abs_deviation']
+    for col in columns_to_remove:
+        if col in raw_df.columns:
+            raw_df = raw_df.drop(columns=[col])
+            logger.info(f"Removed column '{col}' for Hopsworks to match historic schema")
 
     # Save AQI validation data as CSV (only AQI data for comparison)
     import datetime
@@ -69,8 +77,8 @@ def run_hourly_update():
     validation_path = f"data/aqi_validation_current_{daily_date}.csv"
     os.makedirs("data", exist_ok=True)
     
-    # Extract only AQI validation columns
-    raw_df_reset = raw_df.reset_index()
+    # Extract only AQI validation columns (use DataFrame with IQAir data)
+    raw_df_reset = raw_df_with_iqair.reset_index()
     validation_cols = ['time', 'openweather_aqi', 'us_aqi', 'iqair_aqi', 'abs_deviation']
     # Only include columns that exist
     available_cols = [col for col in validation_cols if col in raw_df_reset.columns]
@@ -101,6 +109,7 @@ def run_hourly_update():
 
     # 2. Engineer Features
     logger.info("\nSTEP 2: Engineering features for new data...")
+    logger.info(f"DEBUG: Columns being sent to feature engineering: {list(raw_df.columns)}")
     engineer = AQIFeatureEngineer()
     engineered_df = engineer.engineer_features(raw_df)
     if engineered_df.empty:
