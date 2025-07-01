@@ -374,7 +374,7 @@ class AQIFeatureEngineer:
         Excludes non-feature columns and optionally the target column.
         Excludes IQAir and abs_deviation fields.
         """
-        cols_to_exclude = ['city', 'latitude', 'longitude', 'iqair_aqi', 'abs_deviation']
+        cols_to_exclude = ['city', 'latitude', 'longitude', 'iqair_aqi', 'abs_deviation', 'openweather_aqi']
         if exclude_target:
             cols_to_exclude.append(self.target_column)
             

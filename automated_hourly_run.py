@@ -46,31 +46,36 @@ def run_hourly_update():
         return True
     logger.info(f"Successfully collected {len(raw_df)} new records.")
 
-    # Save raw data as CSV (including IQAir data for validation)
+    # Save AQI validation data as CSV (only AQI data for comparison)
     import datetime
     daily_date = datetime.datetime.utcnow().strftime('%Y%m%d')
-    raw_path = f"data/raw_current_{daily_date}.csv"
+    validation_path = f"data/aqi_validation_current_{daily_date}.csv"
     os.makedirs("data", exist_ok=True)
     
+    # Extract only AQI validation columns
+    raw_df_reset = raw_df.reset_index()
+    validation_cols = ['time', 'openweather_aqi', 'us_aqi', 'iqair_aqi', 'abs_deviation']
+    validation_df = raw_df_reset[validation_cols].copy()
+    
     # Check if file exists and append, or create new file
-    if os.path.exists(raw_path):
+    if os.path.exists(validation_path):
         try:
-            existing_df = pd.read_csv(raw_path, index_col=0, parse_dates=True)
+            existing_df = pd.read_csv(validation_path, index_col=0, parse_dates=True)
             # Append new data
-            combined_df = pd.concat([existing_df, raw_df])
+            combined_df = pd.concat([existing_df, validation_df])
             # Remove duplicates based on timestamp (keep the latest)
             combined_df = combined_df[~combined_df.index.duplicated(keep='last')]
             # Sort by timestamp
             combined_df = combined_df.sort_index()
-            combined_df.to_csv(raw_path)
-            logger.info(f"Appended to existing daily file: {raw_path}")
+            combined_df.to_csv(validation_path)
+            logger.info(f"Appended to existing daily AQI validation file: {validation_path}")
         except Exception as e:
-            logger.warning(f"Error reading existing daily file: {e}. Creating new file.")
-            raw_df.to_csv(raw_path)
-            logger.info(f"Created new daily file: {raw_path}")
+            logger.warning(f"Error reading existing daily AQI validation file: {e}. Creating new file.")
+            validation_df.to_csv(validation_path)
+            logger.info(f"Created new daily AQI validation file: {validation_path}")
     else:
-        raw_df.to_csv(raw_path)
-        logger.info(f"Created new daily file: {raw_path}")
+        validation_df.to_csv(validation_path)
+        logger.info(f"Created new daily AQI validation file: {validation_path}")
 
     # 2. Engineer Features
     logger.info("\nSTEP 2: Engineering features for new data...")

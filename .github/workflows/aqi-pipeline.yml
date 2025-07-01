@@ -33,12 +33,12 @@ jobs:
         env:
           HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
 
-      - name: Commit and push raw data files
+      - name: Commit and push AQI validation data files
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add data/raw_current_*.csv
-          git diff --quiet && git diff --staged --quiet || git commit -m "Update AQI raw data - ${{ github.run_number }}"
+          git add data/aqi_validation_current_*.csv
+          git diff --quiet && git diff --staged --quiet || git commit -m "Update AQI validation data - ${{ github.run_number }}"
           git push
 
       - name: Upload logs and data on failure

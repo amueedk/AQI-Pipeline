@@ -47,13 +47,19 @@ def run_manual_backfill():
         return False
     logger.info(f"Successfully collected {len(raw_df)} records.")
 
-    # Save full raw data as CSV for inspection/backups
+    # Save AQI validation data as CSV (only AQI data for comparison)
     start = (datetime.datetime.utcnow() - datetime.timedelta(days=14)).strftime('%Y%m%d')
     end = datetime.datetime.utcnow().strftime('%Y%m%d')
-    raw_path = f"data/raw_historic_{start}_to_{end}.csv"
+    
+    # Extract only AQI validation columns
+    raw_df_reset = raw_df.reset_index()
+    validation_cols = ['time', 'openweather_aqi', 'us_aqi']
+    validation_df = raw_df_reset[validation_cols].copy()
+    
+    validation_path = f"data/aqi_validation_historic_{start}_to_{end}.csv"
     os.makedirs("data", exist_ok=True)
-    raw_df.to_csv(raw_path)
-    logger.info(f"Full raw data saved to {raw_path}")
+    validation_df.to_csv(validation_path)
+    logger.info(f"AQI validation data saved to {validation_path}")
 
     # 2. Engineer Features
     logger.info("\nSTEP 2: Engineering features...")
