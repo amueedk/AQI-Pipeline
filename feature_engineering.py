@@ -78,7 +78,10 @@ AQI_BREAKPOINTS = {
 def calc_aqi(conc, breakpoints):
     for C_low, C_high, I_low, I_high in breakpoints:
         if C_low <= conc <= C_high:
-            return round((I_high - I_low) / (C_high - C_low) * (conc - C_low) + I_low)
+            aqi = round((I_high - I_low) / (C_high - C_low) * (conc - C_low) + I_low)
+            print(f"calc_aqi: conc={conc}, range=({C_low},{C_high}), AQI={aqi}")
+            return aqi
+    print(f"calc_aqi: conc={conc} did not match any breakpoint, returning None")
     return None
 
 def compute_all_aqi(row):
