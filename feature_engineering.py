@@ -343,21 +343,16 @@ class AQIFeatureEngineer:
         if not isinstance(df.index, pd.DatetimeIndex):
             df.index = pd.to_datetime(df.index)
 
-        # --- COMPUTE ONLY FINAL US AQI ---
-        # Calculate PM2.5 AQI (temporary, not stored in Hopsworks)
-        if 'pm2_5' in df.columns:
-            pm2_5_aqi_temp = df.apply(lambda row: calc_aqi(row['pm2_5'], AQI_BREAKPOINTS['pm2_5']) if not pd.isna(row.get('pm2_5')) else None, axis=1)
-        else:
-            pm2_5_aqi_temp = pd.Series([None] * len(df))
-            
-        # Calculate PM10 AQI (temporary, not stored in Hopsworks)
-        if 'pm10' in df.columns:
-            pm10_aqi_temp = df.apply(lambda row: calc_aqi(row['pm10'], AQI_BREAKPOINTS['pm10']) if not pd.isna(row.get('pm10')) else None, axis=1)
-        else:
-            pm10_aqi_temp = pd.Series([None] * len(df))
-            
-        # Calculate US AQI as maximum of PM2.5 and PM10 AQI (stored in Hopsworks)
-        df['us_aqi'] = df.apply(lambda row: max(pm2_5_aqi_temp.iloc[row.name], pm10_aqi_temp.iloc[row.name]) if pd.notna(pm2_5_aqi_temp.iloc[row.name]) and pd.notna(pm10_aqi_temp.iloc[row.name]) else None, axis=1)
+        # --- AQIs ARE ALREADY CALCULATED IN DATA COLLECTOR ---
+        # The data collector already calculates pm2_5_aqi, pm10_aqi, and us_aqi
+        # We keep all three in Hopsworks for analysis and debugging
+        if 'us_aqi' not in df.columns:
+            logger.warning("us_aqi not found in DataFrame, calculating from pm2_5_aqi and pm10_aqi")
+            if 'pm2_5_aqi' in df.columns and 'pm10_aqi' in df.columns:
+                df['us_aqi'] = df.apply(lambda row: max(row['pm2_5_aqi'], row['pm10_aqi']) if pd.notna(row.get('pm2_5_aqi')) and pd.notna(row.get('pm10_aqi')) else None, axis=1)
+            else:
+                logger.error("Cannot calculate us_aqi: pm2_5_aqi or pm10_aqi not found")
+                df['us_aqi'] = None
 
         # The rest of the pipeline (time features, lags, etc.)
         engineered_df = self.create_time_features(df)
@@ -396,7 +391,6 @@ class AQIFeatureEngineer:
         cols_to_exclude = [
             'city', 'latitude', 'longitude',  # Static location data
             'hour', 'day', 'month', 'year', 'day_of_week', 'day_of_year', 'week_of_year',  # Raw time features
-            'pm2_5_aqi', 'pm10_aqi',  # Intermediate AQI calculations (not stored in Hopsworks)
             'iqair_aqi', 'abs_deviation'  # Validation fields
         ]
         if exclude_targets:
