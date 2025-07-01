@@ -79,8 +79,8 @@ def run_hourly_update():
 
     # Save AQI validation data as CSV (only AQI data for comparison)
     import datetime
-    daily_date = datetime.datetime.utcnow().strftime('%Y%m%d')
-    validation_path = f"data/aqi_validation_current_{daily_date}.csv"
+    now = datetime.datetime.utcnow()
+    validation_path = f"data/aqi_validation_current_{now.strftime('%Y%m%d_%H')}.csv"
     os.makedirs("data", exist_ok=True)
     
     # Extract only AQI validation columns (use DataFrame with IQAir data)
@@ -93,23 +93,9 @@ def run_hourly_update():
     logger.info(f"DEBUG: Validation columns available: {available_cols}")
     validation_df = raw_df_reset[available_cols].copy()
 
-    # Append to existing CSV, remove duplicates by 'time', and save
-    if os.path.exists(validation_path):
-        try:
-            existing_df = pd.read_csv(validation_path)
-            combined_df = pd.concat([existing_df, validation_df])
-            # Remove duplicates based on 'time' (keep the latest)
-            combined_df = combined_df.drop_duplicates(subset=['time'], keep='last')
-            combined_df = combined_df.sort_values('time')
-            combined_df.to_csv(validation_path, index=False)
-            logger.info(f"Appended to existing daily AQI validation file: {validation_path}")
-        except Exception as e:
-            logger.warning(f"Error reading existing daily AQI validation file: {e}. Creating new file.")
-            validation_df.to_csv(validation_path, index=False)
-            logger.info(f"Created new daily AQI validation file: {validation_path}")
-    else:
-        validation_df.to_csv(validation_path, index=False)
-        logger.info(f"Created new daily AQI validation file: {validation_path}")
+    # Save to a new hourly CSV file (no appending)
+    validation_df.to_csv(validation_path, index=False)
+    logger.info(f"Created new hourly AQI validation file: {validation_path}")
 
     # 2. Engineer Features
     logger.info("\nSTEP 2: Engineering features for new data...")
