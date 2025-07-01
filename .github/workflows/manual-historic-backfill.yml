@@ -43,7 +43,7 @@ jobs:
           git config --local user.name "GitHub Action"
           git add data/aqi_validation_historic_*.csv
           git diff --quiet && git diff --staged --quiet || git commit -m "Add historic AQI validation data - ${{ github.run_number }}"
-          git push
+          git push https://x-access-token:${{ secrets.GH_PAT }}@github.com/${{ github.repository }} HEAD:main
 
       - name: Upload logs and data on failure
         if: failure()
