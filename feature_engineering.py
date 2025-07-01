@@ -350,11 +350,37 @@ class AQIFeatureEngineer:
         if not isinstance(df.index, pd.DatetimeIndex):
             df.index = pd.to_datetime(df.index)
 
+        # --- UNIT CONVERSIONS FOR AQI ---
+        # CO: μg/m³ to ppm
+        if 'carbon_monoxide' in df.columns:
+            df['carbon_monoxide_ppm'] = df['carbon_monoxide'] / 1145
+        # NO2: μg/m³ to ppb
+        if 'nitrogen_dioxide' in df.columns:
+            df['nitrogen_dioxide_ppb'] = df['nitrogen_dioxide'] * 0.5229
+        # O3: μg/m³ to ppb
+        if 'ozone' in df.columns:
+            df['ozone_ppb'] = df['ozone'] * 0.509
+        # SO2: μg/m³ to ppb
+        if 'sulphur_dioxide' in df.columns:
+            df['sulphur_dioxide_ppb'] = df['sulphur_dioxide'] * 0.381
+
         # Compute AQI for each pollutant and overall AQI
-        aqi_cols = ["pm2_5", "pm10", "ozone", "carbon_monoxide", "sulphur_dioxide", "nitrogen_dioxide"]
-        for col in aqi_cols:
-            aqi_name = f"{col}_aqi"
-            df[aqi_name] = df.apply(lambda row: calc_aqi(row[col], AQI_BREAKPOINTS[col if col not in ["ozone", "carbon_monoxide", "sulphur_dioxide", "nitrogen_dioxide"] else {"ozone": "o3_8h", "carbon_monoxide": "co", "sulphur_dioxide": "so2", "nitrogen_dioxide": "no2"}[col]]) if not pd.isna(row.get(col)) else None, axis=1)
+        # Use converted columns for AQI calculation
+        aqi_cols = [
+            ("pm2_5", "pm2_5", None),
+            ("pm10", "pm10", None),
+            ("ozone", "ozone_ppb", "o3_8h"),
+            ("carbon_monoxide", "carbon_monoxide_ppm", "co"),
+            ("sulphur_dioxide", "sulphur_dioxide_ppb", "so2"),
+            ("nitrogen_dioxide", "nitrogen_dioxide_ppb", "no2"),
+        ]
+        for orig_col, aqi_col, bp_key in aqi_cols:
+            aqi_name = f"{orig_col}_aqi"
+            if aqi_col in df.columns:
+                breakpoints = AQI_BREAKPOINTS[bp_key if bp_key else orig_col]
+                df[aqi_name] = df.apply(lambda row: calc_aqi(row[aqi_col], breakpoints) if not pd.isna(row.get(aqi_col)) else None, axis=1)
+            else:
+                df[aqi_name] = None
         df["overall_aqi"] = df.apply(compute_overall_aqi, axis=1)
 
         # The rest of the pipeline (time features, lags, etc.)
@@ -370,6 +396,16 @@ class AQIFeatureEngineer:
         for col in numeric_cols:
             engineered_df[col] = engineered_df[col].astype('float64')
         
+        # Drop city, latitude, longitude columns if present
+        for col in ['city', 'latitude', 'longitude']:
+            if col in engineered_df.columns:
+                engineered_df = engineered_df.drop(columns=[col])
+
+        # Drop raw time columns if present
+        for col in ['hour', 'month', 'day', 'day_of_week', 'day_of_year', 'week_of_year']:
+            if col in engineered_df.columns:
+                engineered_df = engineered_df.drop(columns=[col])
+
         logger.info(f"Feature engineering complete. Final dataframe shape: {engineered_df.shape}")
         logger.info(f"Converted {len(numeric_cols)} numeric columns to float64 for Hopsworks compatibility")
         return engineered_df
