@@ -390,10 +390,27 @@ class AQIFeatureEngineer:
         engineered_df = self.create_interaction_features(engineered_df)
         engineered_df = self.handle_missing_values(engineered_df)
         
-        # Convert numeric columns to float64 to match Hopsworks schema
-        numeric_cols = engineered_df.select_dtypes(include=['int64', 'float64']).columns
-        for col in numeric_cols:
-            engineered_df[col] = engineered_df[col].astype('float64')
+        # Convert numeric columns to appropriate types for Hopsworks schema
+        # Boolean features should be bigint (0/1), others should be float64
+        boolean_features = [
+            'is_spring', 'is_summer', 'is_autumn', 'is_winter', 'is_night',
+            'is_morning_rush', 'is_evening_rush', 'is_hot', 'is_cold',
+            'is_high_humidity', 'is_low_humidity', 'is_high_wind', 'is_calm',
+            'is_low_pressure', 'is_high_pressure', 'is_high_pm2_5', 'is_low_pm2_5',
+            'is_high_pm10', 'is_low_pm10', 'is_high_no2', 'is_high_o3',
+            'is_high_co', 'is_high_so2'
+        ]
+        
+        # Convert boolean features to int64 (bigint in Hopsworks)
+        for col in boolean_features:
+            if col in engineered_df.columns:
+                engineered_df[col] = engineered_df[col].astype('int64')
+        
+        # Convert other numeric columns to float64
+        other_numeric_cols = engineered_df.select_dtypes(include=['int64', 'float64']).columns
+        for col in other_numeric_cols:
+            if col not in boolean_features:
+                engineered_df[col] = engineered_df[col].astype('float64')
         
         # Drop location and raw time columns (using cyclic encoding instead)
         columns_to_drop = [
@@ -410,7 +427,7 @@ class AQIFeatureEngineer:
         engineered_df['time'] = engineered_df.index
         
         logger.info(f"PM2.5/PM10-focused feature engineering complete. Final dataframe shape: {engineered_df.shape}")
-        logger.info(f"Converted {len(numeric_cols)} numeric columns to float64 for Hopsworks compatibility")
+        logger.info(f"Converted {len(other_numeric_cols)} numeric columns to float64 for Hopsworks compatibility")
         return engineered_df
     
     def get_feature_columns(self, df: pd.DataFrame, exclude_targets: bool = True) -> List[str]:

@@ -71,7 +71,7 @@ class HopsworksUploader:
                 description=description,
                 primary_key=['time_str'],
                 event_time='time',
-                online_enabled=True,
+                online_enabled=False,  # Always offline, no Kafka required
             )
 
             logger.info(f"Inserting {len(df_to_insert)} rows into feature group '{group_name}'...")
