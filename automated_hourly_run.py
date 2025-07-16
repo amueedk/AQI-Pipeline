@@ -161,6 +161,15 @@ def run_hourly_update():
         
         # Now combine the existing engineered data with new engineered data
         # We need to ensure the new data doesn't duplicate existing timestamps
+        # First, ensure both DataFrames have the same index type
+        logger.info("Ensuring consistent index types...")
+        
+        # Convert new data index to match existing data index type
+        if isinstance(existing_df.index, pd.DatetimeIndex):
+            new_engineered_df.index = pd.to_datetime(new_engineered_df.index)
+        elif isinstance(new_engineered_df.index, pd.DatetimeIndex):
+            existing_df.index = pd.to_datetime(existing_df.index)
+        
         existing_timestamps = set(existing_df.index)
         new_timestamps = set(new_engineered_df.index)
         

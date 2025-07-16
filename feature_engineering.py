@@ -406,6 +406,9 @@ class AQIFeatureEngineer:
                 engineered_df = engineered_df.drop(columns=[col])
                 logger.info(f"Dropped column '{col}' (using cyclic encoding or static data)")
 
+        # Add time column back (required for Hopsworks)
+        engineered_df['time'] = engineered_df.index
+        
         logger.info(f"PM2.5/PM10-focused feature engineering complete. Final dataframe shape: {engineered_df.shape}")
         logger.info(f"Converted {len(numeric_cols)} numeric columns to float64 for Hopsworks compatibility")
         return engineered_df
