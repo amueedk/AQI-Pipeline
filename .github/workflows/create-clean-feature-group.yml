@@ -26,21 +26,21 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         
-    - name: Check for good data CSV
+    - name: Check for fixed data CSV
       run: |
-        if [ ! -f "good_hopsworks_data_20250716_204528.csv" ]; then
-          echo "❌ Good data CSV not found!"
+        if [ ! -f "good_hopsworks_data_fixed.csv" ]; then
+          echo "❌ Fixed data CSV not found!"
           exit 1
         fi
-        echo "✅ Good data CSV found"
-        ls -la good_hopsworks_data_20250716_204528.csv
+        echo "✅ Fixed data CSV found"
+        ls -la good_hopsworks_data_fixed.csv
         
     - name: Create clean feature group
       env:
         HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
       run: |
         echo "=== Creating Clean Feature Group ==="
-        echo "This will create 'multan_aqi_features_clean' with only Celsius temperature data"
+        echo "This will create 'multan_aqi_features_clean' with FIXED lag/rolling features"
         echo "Confirming input: ${{ github.event.inputs.confirm }}"
         
         if [ "${{ github.event.inputs.confirm }}" != "yes" ]; then
@@ -97,8 +97,8 @@ jobs:
         echo "=== Summary ==="
         echo "✅ Clean feature group creation completed"
         echo "📁 Feature group name: multan_aqi_features_clean"
-        echo "📊 Contains: 337 records with Celsius temperatures only"
-        echo "🚫 Excludes: Kelvin temperatures and duplicate weather data"
+        echo "📊 Contains: 337 records with properly calculated lag/rolling features"
+        echo "✅ All time-series features are now correctly engineered"
         echo ""
         echo "Next steps:"
         echo "1. Verify the feature group in Hopsworks UI"

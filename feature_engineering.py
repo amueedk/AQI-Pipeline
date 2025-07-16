@@ -302,6 +302,7 @@ class AQIFeatureEngineer:
         """
         Handle missing values in the dataset using a forward-fill strategy,
         which is suitable for time-series data. Also handles infinite values.
+        IMPORTANT: Preserves legitimate NaN values in lag features.
         """
         df = df.copy()
         
@@ -312,18 +313,45 @@ class AQIFeatureEngineer:
         if nan_count_before > 0:
             logger.info(f"Found {nan_count_before} missing or infinite values to handle.")
 
-        # Step 1: Forward-fill
-        df.ffill(inplace=True)
+        # Identify lag, rolling, and change rate features that should preserve NaN values
+        lag_features = [col for col in df.columns if any(x in col for x in ['lag_', 'rolling_', 'change_rate'])]
+        non_lag_features = [col for col in df.columns if col not in lag_features]
         
-        # Step 2: Backward-fill for any NaNs remaining at the start of the series
-        df.bfill(inplace=True)
-
-        # Step 3: Fill any remaining NaNs (if a whole column was NaN) with 0
-        df.fillna(0, inplace=True)
+        # Handle missing values for non-lag features only
+        if non_lag_features:
+            non_lag_df = df[non_lag_features].copy()
+            
+            # Step 1: Forward-fill for non-lag features
+            non_lag_df.ffill(inplace=True)
+            
+            # Step 2: Backward-fill for any NaNs remaining at the start
+            non_lag_df.bfill(inplace=True)
+            
+            # Step 3: Fill any remaining NaNs with 0
+            non_lag_df.fillna(0, inplace=True)
+            
+            # Update the original dataframe with cleaned non-lag features
+            df[non_lag_features] = non_lag_df
+        
+        # For lag features, only handle infinite values and fill any remaining NaNs with 0
+        # but preserve the legitimate NaN values at the beginning of the series
+        if lag_features:
+            lag_df = df[lag_features].copy()
+            
+            # Only fill NaNs that are not at the beginning of the series (legitimate missing data)
+            for col in lag_features:
+                # Find the first non-NaN value
+                first_valid_idx = lag_df[col].first_valid_index()
+                if first_valid_idx is not None:
+                    # Fill NaNs after the first valid value, but preserve NaNs before it
+                    lag_df.loc[first_valid_idx:, col] = lag_df.loc[first_valid_idx:, col].fillna(0)
+            
+            # Update the original dataframe with cleaned lag features
+            df[lag_features] = lag_df
         
         nan_count_after = df.isnull().sum().sum()
         if nan_count_after > 0:
-            logger.warning(f"There are still {nan_count_after} missing values after handling.")
+            logger.info(f"Preserved {nan_count_after} legitimate NaN values in lag features.")
         else:
             logger.info("Successfully handled all missing values.")
             

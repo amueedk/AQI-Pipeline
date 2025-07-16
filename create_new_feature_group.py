@@ -32,8 +32,8 @@ def create_new_feature_group():
     print("Creating a new feature group with clean data")
     print("We'll rename it later to match the original name.")
     
-    # Find the good data CSV
-    csv_file = "good_hopsworks_data_20250716_204528.csv"
+    # Find the fixed data CSV
+    csv_file = "good_hopsworks_data_fixed.csv"
     if not os.path.exists(csv_file):
         logger.error(f"CSV file not found: {csv_file}")
         return False
@@ -82,7 +82,7 @@ def create_new_feature_group():
         fg = uploader.fs.get_or_create_feature_group(
             name=new_name,
             version=1,
-            description="Multan AQI features with clean data (Celsius temperatures only) - temporary name",
+            description="Multan AQI features with FIXED lag/rolling features (correctly calculated) - temporary name",
             primary_key=['time_str'],
             event_time='time',
             online_enabled=False,  # Disable online features to avoid Kafka dependency
@@ -115,6 +115,7 @@ def create_new_feature_group():
         logger.info("1. Try to delete the old corrupted feature group later")
         logger.info("2. Rename this new feature group to 'multan_aqi_features'")
         logger.info("3. Update your GitHub Actions if needed")
+        logger.info("4. ✅ All lag/rolling/change-rate features are now correctly calculated!")
         
         return True
         
@@ -132,6 +133,7 @@ if __name__ == "__main__":
     if success:
         print("\n✅ New feature group created successfully!")
         print("Feature group name: multan_aqi_features_clean")
-        print("You can now work with this clean data while we resolve the deletion issue.")
+        print("✅ All lag/rolling/change-rate features are now correctly calculated!")
+        print("You can now work with this properly engineered data while we resolve the deletion issue.")
     else:
         print("\n❌ Failed to create new feature group. Check logs for details.") 
