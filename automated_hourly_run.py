@@ -30,6 +30,35 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+def fetch_existing_hopsworks_data(uploader, group_name):
+    """
+    Fetch existing data from Hopsworks feature group.
+    Returns DataFrame with existing data or empty DataFrame if none exists.
+    """
+    try:
+        logger.info(f"Fetching existing data from feature group: {group_name}")
+        
+        # Get the feature group
+        fg = uploader.fs.get_feature_group(
+            name=group_name,
+            version=1  # Use version 1 as specified in hopsworks_integration.py
+        )
+        
+        # Read all data from the feature group
+        df = fg.read()
+        
+        if df.empty:
+            logger.info("No existing data found in Hopsworks feature group.")
+            return pd.DataFrame()
+        
+        logger.info(f"Successfully fetched {len(df)} existing records from Hopsworks.")
+        return df
+        
+    except Exception as e:
+        logger.warning(f"Could not fetch existing data from Hopsworks: {e}")
+        logger.info("Will proceed with only new data (lag features will be NaN for first few records).")
+        return pd.DataFrame()
+
 def run_hourly_update():
     """
     Executes the hourly data update pipeline.
@@ -55,8 +84,22 @@ def run_hourly_update():
     if not hopsworks_key:
         logger.error("ERROR: HOPSWORKS_API_KEY environment variable is not set!")
 
-    # 1. Collect Current Data (OpenWeather + IQAir AQI for comparison)
-    logger.info("STEP 1: Collecting current data (OpenWeather + IQAir AQI for comparison)...")
+    # 1. Initialize Hopsworks connection first
+    logger.info("STEP 1: Connecting to Hopsworks...")
+    uploader = HopsworksUploader(
+        api_key=os.getenv("HOPSWORKS_API_KEY", HOPSWORKS_CONFIG.get('api_key')),
+        project_name=HOPSWORKS_CONFIG['project_name']
+    )
+    if not uploader.connect():
+        logger.error("Could not connect to Hopsworks. Aborting.")
+        return False
+
+    # 2. Fetch existing data from Hopsworks for lag/rolling features
+    logger.info("STEP 2: Fetching existing data from Hopsworks...")
+    existing_df = fetch_existing_hopsworks_data(uploader, HOPSWORKS_CONFIG['feature_group_name'])
+    
+    # 3. Collect Current Data (OpenWeather + IQAir AQI for comparison)
+    logger.info("STEP 3: Collecting current data (OpenWeather + IQAir AQI for comparison)...")
     raw_df_with_iqair = collect_current_data_with_iqair()
     if raw_df_with_iqair.empty:
         logger.warning("No new data collected in the last hour. Exiting gracefully.")
@@ -99,25 +142,69 @@ def run_hourly_update():
     validation_df.to_csv(validation_path, index=False)
     logger.info(f"Created new hourly AQI validation file: {validation_path}")
 
-    # 2. Engineer Features
-    logger.info("\nSTEP 2: Engineering features for new data...")
-    logger.info(f"DEBUG: Columns being sent to feature engineering: {list(raw_df.columns)}")
-    engineer = AQIFeatureEngineer()
-    engineered_df = engineer.engineer_features(raw_df)
-    if engineered_df.empty:
-        logger.error("Feature engineering resulted in an empty DataFrame. Aborting.")
-        return False
-    logger.info(f"Successfully engineered {engineered_df.shape[1]} features.")
+    # 4. Combine existing and new data for proper feature engineering
+    logger.info("\nSTEP 4: Combining existing and new data...")
+    if not existing_df.empty:
+        # If we have existing data, we need to handle the schema properly
+        # The existing data will have all engineered features, but new data only has raw features
+        
+        # For the new data, we'll engineer features separately and then combine
+        logger.info("Engineering features for new data only...")
+        engineer = AQIFeatureEngineer()
+        new_engineered_df = engineer.engineer_features(raw_df)
+        
+        if new_engineered_df.empty:
+            logger.error("Feature engineering for new data resulted in an empty DataFrame. Aborting.")
+            return False
+        
+        logger.info(f"Successfully engineered {new_engineered_df.shape[1]} features for new data.")
+        
+        # Now combine the existing engineered data with new engineered data
+        # We need to ensure the new data doesn't duplicate existing timestamps
+        existing_timestamps = set(existing_df.index)
+        new_timestamps = set(new_engineered_df.index)
+        
+        # Remove any new data that already exists in Hopsworks
+        duplicate_timestamps = new_timestamps.intersection(existing_timestamps)
+        if duplicate_timestamps:
+            logger.warning(f"Found {len(duplicate_timestamps)} duplicate timestamps. Removing duplicates.")
+            new_engineered_df = new_engineered_df[~new_engineered_df.index.isin(duplicate_timestamps)]
+        
+        if new_engineered_df.empty:
+            logger.warning("No new unique data to add after removing duplicates.")
+            return True
+        
+        # Combine existing and new data
+        combined_df = pd.concat([existing_df, new_engineered_df], axis=0)
+        combined_df = combined_df.sort_index()  # Sort by time
+        
+        logger.info(f"Combined dataset: {len(existing_df)} existing + {len(new_engineered_df)} new = {len(combined_df)} total records")
+        
+        # Re-engineer features on the combined dataset
+        logger.info("Re-engineering features on combined dataset...")
+        engineer = AQIFeatureEngineer()
+        engineered_df = engineer.engineer_features(combined_df)
+        
+        if engineered_df.empty:
+            logger.error("Feature engineering on combined dataset resulted in an empty DataFrame. Aborting.")
+            return False
+        
+        logger.info(f"Successfully re-engineered features on combined dataset: {engineered_df.shape[1]} features.")
+        
+    else:
+        # No existing data, just engineer features for the new data
+        logger.info("No existing data found. Engineering features for new data...")
+        engineer = AQIFeatureEngineer()
+        engineered_df = engineer.engineer_features(raw_df)
+        
+        if engineered_df.empty:
+            logger.error("Feature engineering resulted in an empty DataFrame. Aborting.")
+            return False
+        
+        logger.info(f"Successfully engineered {engineered_df.shape[1]} features.")
 
-    # 3. Push to Hopsworks
-    logger.info("\nSTEP 3: Pushing new features to Hopsworks...")
-    uploader = HopsworksUploader(
-        api_key=os.getenv("HOPSWORKS_API_KEY", HOPSWORKS_CONFIG.get('api_key')),
-        project_name=HOPSWORKS_CONFIG['project_name']
-    )
-    if not uploader.connect():
-        logger.error("Could not connect to Hopsworks. Aborting.")
-        return False
+    # 5. Push to Hopsworks
+    logger.info("\nSTEP 5: Pushing updated features to Hopsworks...")
     
     success = uploader.push_features(
         df=engineered_df,

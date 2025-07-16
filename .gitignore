@@ -2,6 +2,12 @@
 logs/
 temp/
 
+# Log files (should not be committed)
+*.log
+automated_run.log
+automated_run_fixed.log
+create_new_feature_group.log
+
 # Python cache
 __pycache__/
 *.pyc
