@@ -38,11 +38,11 @@ jobs:
           git config --global user.name "GitHub Action"
           git pull origin main --allow-unrelated-histories --rebase
 
-      - name: Run automated hourly update script
+      - name: Run automated hourly update script (FIXED VERSION)
         # This script handles data collection, feature engineering,
-        # and pushing to Hopsworks.
+        # and pushing to Hopsworks with proper lag/rolling feature handling.
         run: |
-          python automated_hourly_run.py
+          python automated_hourly_run_fixed.py
         env:
           HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
           OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
