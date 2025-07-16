@@ -185,6 +185,13 @@ def run_hourly_update():
         
         # Combine existing and new data
         combined_df = pd.concat([existing_df, new_engineered_df], axis=0)
+        
+        # Robust timezone fix: always convert to UTC, then to naive
+        logger.info("Fixing timezone consistency for sorting...")
+        combined_df.index = pd.to_datetime(combined_df.index, utc=True, errors='coerce')
+        if isinstance(combined_df.index, pd.DatetimeIndex) and combined_df.index.tz is not None:
+            logger.info("Converting timezone-aware timestamps to timezone-naive...")
+            combined_df.index = combined_df.index.tz_localize(None)
         combined_df = combined_df.sort_index()  # Sort by time
         
         logger.info(f"Combined dataset: {len(existing_df)} existing + {len(new_engineered_df)} new = {len(combined_df)} total records")
