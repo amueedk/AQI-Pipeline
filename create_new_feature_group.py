@@ -17,7 +17,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler("create_new_feature_group.log"),
+        logging.FileHandler("logs/create_new_feature_group.log"),
         logging.StreamHandler()
     ]
 )
