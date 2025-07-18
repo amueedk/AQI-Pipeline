@@ -71,7 +71,7 @@ IQAIR_CONFIG = {
 # OpenWeather API Configuration
 OPENWEATHER_CONFIG = {
     "api_key": os.getenv("OPENWEATHER_API_KEY", ""),
-    "base_url": "https://api.openweathermap.org/data/2.5",
+    "base_url": "https://pro.openweathermap.org/data/2.5",  # Pro endpoint for current data
     "lat": 30.1575,
     "lon": 71.5249,
     "city": "Multan",

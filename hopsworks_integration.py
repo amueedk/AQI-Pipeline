@@ -4,12 +4,51 @@ import hopsworks
 import logging
 from config import HOPSWORKS_CONFIG
 from typing import Optional
+from functools import wraps
+import time
+import random
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
 # This version will be incremented if we change the feature group schema
 FEATURE_GROUP_VERSION = 1
+
+def retry_on_hopsworks_error(max_retries=2, delay=120, backoff_factor=2.0):
+    """
+    Retry decorator specifically for Hopsworks operations
+    
+    Args:
+        max_retries: Maximum number of retry attempts (default: 2)
+        delay: Initial delay in seconds (default: 120 = 2 minutes)
+        backoff_factor: Multiplier for delay on each retry (default: 2.0)
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            last_exception = None
+            
+            for attempt in range(max_retries + 1):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    last_exception = e
+                    
+                    if attempt == max_retries:
+                        logger.error(f"❌ {func.__name__} failed after {max_retries} retries. Final error: {e}")
+                        raise e
+                    
+                    # Calculate delay with exponential backoff
+                    current_delay = delay * (backoff_factor ** attempt)
+                    
+                    logger.warning(f"⚠️ {func.__name__} attempt {attempt + 1} failed: {e}")
+                    logger.info(f"🔄 Retrying Hopsworks operation in {current_delay:.1f} seconds...")
+                    time.sleep(current_delay)
+            
+            # This should never be reached, but just in case
+            raise last_exception
+        return wrapper
+    return decorator
 
 class HopsworksUploader:
     def __init__(self, api_key: str, project_name: str):
@@ -18,6 +57,7 @@ class HopsworksUploader:
         self.project = None
         self.fs = None
 
+    @retry_on_hopsworks_error()
     def connect(self) -> bool:
         """Connects to the Hopsworks project."""
         if not self.api_key:
@@ -36,6 +76,7 @@ class HopsworksUploader:
             logger.error(f"Failed to connect to Hopsworks: {e}")
             return False
 
+    @retry_on_hopsworks_error()
     def push_features(self, df: pd.DataFrame, group_name: str, description: str) -> bool:
         """
         Pushes an engineered features DataFrame to a feature group in Hopsworks.

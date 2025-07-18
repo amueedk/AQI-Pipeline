@@ -157,7 +157,7 @@ class AQIFeatureEngineer:
     
     def create_lag_features(self, df: pd.DataFrame, target_col: str = None) -> pd.DataFrame:
         """
-        Create lag features for time series prediction
+        Create true time-based lag features for time series prediction
         Only create lags for PM2.5 and PM10 (target variables)
         Other pollutants are used as current features only
         """
@@ -166,27 +166,151 @@ class AQIFeatureEngineer:
             
         df = df.copy()
         
+        # Ensure data is sorted by timestamp first
+        df = df.sort_index()
+        
         # Create lag features for both target variables (PM2.5 and PM10)
         for target in self.target_columns:
             if target in df.columns:
-                # Create lag features for target variable
+                # Create time-based lag features for target variable
                 for lag in self.lag_hours:
-                    df[f'{target}_lag_{lag}h'] = df[target].shift(lag)
+                    df[f'{target}_lag_{lag}h'] = self._create_time_based_lag(df, target, lag)
                 
-                # Create rolling statistics
+                # Create time-based rolling statistics
                 for window in self.rolling_windows:
-                    df[f'{target}_rolling_mean_{window}h'] = df[target].rolling(window=window).mean()
-                    df[f'{target}_rolling_std_{window}h'] = df[target].rolling(window=window).std()
-                    df[f'{target}_rolling_min_{window}h'] = df[target].rolling(window=window).min()
-                    df[f'{target}_rolling_max_{window}h'] = df[target].rolling(window=window).max()
+                    df[f'{target}_rolling_mean_{window}h'] = self._create_time_based_rolling(df, target, window, 'mean')
+                    df[f'{target}_rolling_std_{window}h'] = self._create_time_based_rolling(df, target, window, 'std')
+                    df[f'{target}_rolling_min_{window}h'] = self._create_time_based_rolling(df, target, window, 'min')
+                    df[f'{target}_rolling_max_{window}h'] = self._create_time_based_rolling(df, target, window, 'max')
                 
-                # Create change rate features
-                df[f'{target}_change_rate_1h'] = df[target].pct_change(1)
-                df[f'{target}_change_rate_6h'] = df[target].pct_change(6)
-                df[f'{target}_change_rate_24h'] = df[target].pct_change(24)
+                # Create time-based change rate features
+                df[f'{target}_change_rate_1h'] = self._create_time_based_change_rate(df, target, 1)
+                df[f'{target}_change_rate_6h'] = self._create_time_based_change_rate(df, target, 6)
+                df[f'{target}_change_rate_24h'] = self._create_time_based_change_rate(df, target, 24)
         
-        logger.info(f"Created lag features for target variables: {self.target_columns}")
+        logger.info(f"Created true time-based lag features for target variables: {self.target_columns}")
         return df
+    
+    def _get_tolerance(self, period: int, feature_type: str = 'lag') -> timedelta:
+        """
+        Get tolerance based on period and feature type
+        """
+        if feature_type == 'lag':
+            # Proportional tolerance: 50% of the period
+            tolerance_hours = period * 0.5
+            return timedelta(hours=tolerance_hours)
+        elif feature_type == 'rolling':
+            # For rolling, use 25% of the window as tolerance for gaps
+            tolerance_hours = period * 0.25
+            return timedelta(hours=tolerance_hours)
+        else:  # change_rate
+            # For change rate, use 50% of the period
+            tolerance_hours = period * 0.5
+            return timedelta(hours=tolerance_hours)
+    
+    def _create_time_based_lag(self, df: pd.DataFrame, target: str, lag_hours: int) -> pd.Series:
+        """
+        Create time-based lag feature that finds data approximately lag_hours ago
+        """
+        import numpy as np
+        from datetime import timedelta
+        
+        lag_series = pd.Series(index=df.index, dtype=float)
+        tolerance = self._get_tolerance(lag_hours, 'lag')
+        
+        for i, current_time in enumerate(df.index):
+            target_time = current_time - timedelta(hours=lag_hours)
+            
+            # Find data within acceptable range
+            acceptable_range_start = target_time - tolerance
+            acceptable_range_end = target_time + tolerance
+            
+            # Use pandas boolean indexing for efficiency
+            mask = (df.index >= acceptable_range_start) & (df.index <= acceptable_range_end)
+            matching_data = df[mask][target]
+            
+            if len(matching_data) > 0:
+                # Use the closest data point to target_time
+                matching_indices = df.index[mask]
+                time_diffs = [(idx - target_time).total_seconds() for idx in matching_indices]
+                min_diff_idx = np.argmin(np.abs(time_diffs))
+                closest_idx = matching_indices[min_diff_idx]
+                lag_series.iloc[i] = df.loc[closest_idx, target]
+            else:
+                lag_series.iloc[i] = np.nan
+        
+        return lag_series
+    
+    def _create_time_based_rolling(self, df: pd.DataFrame, target: str, window_hours: int, stat_type: str) -> pd.Series:
+        """
+        Create time-based rolling statistics using ALL data in the time window
+        """
+        import numpy as np
+        from datetime import timedelta
+        
+        rolling_series = pd.Series(index=df.index, dtype=float)
+        
+        for i, current_time in enumerate(df.index):
+            window_start = current_time - timedelta(hours=window_hours)
+            
+            # Get ALL data in the window (no tolerance checks)
+            window_mask = (df.index >= window_start) & (df.index <= current_time)
+            window_data = df[window_mask][target]
+            
+            if len(window_data) < 2:
+                rolling_series.iloc[i] = np.nan
+                continue
+            
+            # Calculate rolling statistic with all available data
+            if stat_type == 'mean':
+                rolling_series.iloc[i] = window_data.mean()
+            elif stat_type == 'std':
+                rolling_series.iloc[i] = window_data.std()
+            elif stat_type == 'min':
+                rolling_series.iloc[i] = window_data.min()
+            elif stat_type == 'max':
+                rolling_series.iloc[i] = window_data.max()
+        
+        return rolling_series
+    
+    def _create_time_based_change_rate(self, df: pd.DataFrame, target: str, period_hours: int) -> pd.Series:
+        """
+        Create time-based change rate that finds data approximately period_hours ago
+        """
+        import numpy as np
+        from datetime import timedelta
+        
+        change_rate_series = pd.Series(index=df.index, dtype=float)
+        tolerance = self._get_tolerance(period_hours, 'change_rate')
+        
+        for i, current_time in enumerate(df.index):
+            target_time = current_time - timedelta(hours=period_hours)
+            current_value = df.iloc[i][target]
+            
+            # Find data within acceptable range
+            acceptable_range_start = target_time - tolerance
+            acceptable_range_end = target_time + tolerance
+            
+            # Use pandas boolean indexing for efficiency
+            mask = (df.index >= acceptable_range_start) & (df.index <= acceptable_range_end)
+            matching_data = df[mask][target]
+            
+            if len(matching_data) > 0 and not pd.isna(current_value):
+                # Use the closest data point to target_time
+                matching_indices = df.index[mask]
+                time_diffs = [(idx - target_time).total_seconds() for idx in matching_indices]
+                min_diff_idx = np.argmin(np.abs(time_diffs))
+                closest_idx = matching_indices[min_diff_idx]
+                previous_value = df.loc[closest_idx, target]
+                
+                if not pd.isna(previous_value) and previous_value != 0:
+                    change_rate_series.iloc[i] = (current_value - previous_value) / previous_value
+                else:
+                    change_rate_series.iloc[i] = np.nan
+            else:
+                change_rate_series.iloc[i] = np.nan
+        
+        return change_rate_series
     
     def create_weather_derived_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -333,18 +457,13 @@ class AQIFeatureEngineer:
             # Update the original dataframe with cleaned non-lag features
             df[non_lag_features] = non_lag_df
         
-        # For lag features, only handle infinite values and fill any remaining NaNs with 0
-        # but preserve the legitimate NaN values at the beginning of the series
+        # For lag features, preserve ALL NaN values as they indicate legitimate gaps
+        # Only handle infinite values, but keep NaN for time-based features
         if lag_features:
             lag_df = df[lag_features].copy()
             
-            # Only fill NaNs that are not at the beginning of the series (legitimate missing data)
-            for col in lag_features:
-                # Find the first non-NaN value
-                first_valid_idx = lag_df[col].first_valid_index()
-                if first_valid_idx is not None:
-                    # Fill NaNs after the first valid value, but preserve NaNs before it
-                    lag_df.loc[first_valid_idx:, col] = lag_df.loc[first_valid_idx:, col].fillna(0)
+            # Only replace infinite values with NaN, but preserve all other NaN values
+            lag_df.replace([np.inf, -np.inf], np.nan, inplace=True)
             
             # Update the original dataframe with cleaned lag features
             df[lag_features] = lag_df

@@ -13,7 +13,7 @@ It will:
 import logging
 import os
 from config import HOPSWORKS_CONFIG
-from data_collector import collect_current_data_with_iqair
+from data_collector import collect_current_data_with_iqair, retry_on_network_error
 from feature_engineering import AQIFeatureEngineer
 from hopsworks_integration import HopsworksUploader
 import pandas as pd
@@ -59,6 +59,7 @@ def fetch_existing_hopsworks_data(uploader, group_name):
         logger.info("Will proceed with only new data (lag features will be NaN for first few records).")
         return pd.DataFrame()
 
+@retry_on_network_error(max_retries=1, delay=300)  # 1 retry, 5 minute delay
 def run_hourly_update():
     """
     Executes the hourly data update pipeline.
@@ -97,6 +98,11 @@ def run_hourly_update():
     # 2. Fetch existing data from Hopsworks for lag/rolling features
     logger.info("STEP 2: Fetching existing data from Hopsworks...")
     existing_df = fetch_existing_hopsworks_data(uploader, HOPSWORKS_CONFIG['feature_group_name'])
+    
+    # Sort existing data by timestamp to ensure proper lag feature calculation
+    if not existing_df.empty:
+        existing_df = existing_df.sort_index()
+        logger.info("Sorted existing data by timestamp for proper lag feature calculation")
     
     # 3. Collect Current Data (OpenWeather + IQAir AQI for comparison)
     logger.info("STEP 3: Collecting current data (OpenWeather + IQAir AQI for comparison)...")

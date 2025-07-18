@@ -8,7 +8,9 @@ import numpy as np
 from datetime import datetime, timedelta
 import time
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
+from functools import wraps
+import random
 import json
 import os
 from config import DATA_CONFIG, PATHS, IQAIR_CONFIG, OPENWEATHER_CONFIG, OPENWEATHER_HISTORY_WEATHER_URL
@@ -111,6 +113,54 @@ def compute_pm2_5_aqi(row):
         return calc_aqi(row["pm2_5"], AQI_BREAKPOINTS["pm2_5"])
     return None
 
+def retry_on_network_error(max_retries=3, delay=300, backoff_factor=1.5, jitter=True):
+    """
+    Retry decorator for network operations with exponential backoff
+    
+    Args:
+        max_retries: Maximum number of retry attempts (default: 3)
+        delay: Initial delay in seconds (default: 300 = 5 minutes)
+        backoff_factor: Multiplier for delay on each retry (default: 1.5)
+        jitter: Add random jitter to prevent thundering herd (default: True)
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            last_exception = None
+            
+            for attempt in range(max_retries + 1):
+                try:
+                    return func(*args, **kwargs)
+                except (requests.exceptions.RequestException, 
+                       requests.exceptions.Timeout,
+                       requests.exceptions.ConnectionError,
+                       requests.exceptions.HTTPError) as e:
+                    last_exception = e
+                    
+                    if attempt == max_retries:
+                        logger.error(f"❌ {func.__name__} failed after {max_retries} retries. Final error: {e}")
+                        raise e
+                    
+                    # Calculate delay with exponential backoff
+                    current_delay = delay * (backoff_factor ** attempt)
+                    
+                    # Add jitter to prevent thundering herd
+                    if jitter:
+                        current_delay *= (0.5 + random.random())
+                    
+                    logger.warning(f"⚠️ {func.__name__} attempt {attempt + 1} failed: {e}")
+                    logger.info(f"🔄 Retrying in {current_delay:.1f} seconds...")
+                    time.sleep(current_delay)
+                except Exception as e:
+                    # Non-network errors should not be retried
+                    logger.error(f"❌ {func.__name__} failed with non-network error: {e}")
+                    raise e
+            
+            # This should never be reached, but just in case
+            raise last_exception
+        return wrapper
+    return decorator
+
 class IQAirDataCollector:
     def __init__(self):
         self.api_key = IQAIR_CONFIG["api_key"]
@@ -119,6 +169,7 @@ class IQAirDataCollector:
         self.state = IQAIR_CONFIG["state"]
         self.country = IQAIR_CONFIG["country"]
 
+    @retry_on_network_error()
     def fetch_current_aqi(self) -> pd.DataFrame:
         """
         Fetches the latest AQI (us_aqi) for the configured city from IQAir.
@@ -150,6 +201,7 @@ class IQAirDataCollector:
             logger.warning(f"IQAir API error: {e}")
             return pd.DataFrame()
 
+@retry_on_network_error()
 def fetch_historic_weather(start_unix, end_unix):
     """
     Fetch hourly weather data from OpenWeather historic endpoint for Multan.
@@ -184,6 +236,7 @@ class OpenWeatherDataCollector:
         self.lat = OPENWEATHER_CONFIG["lat"]
         self.lon = OPENWEATHER_CONFIG["lon"]
 
+    @retry_on_network_error()
     def fetch_air_pollution(self, start_unix=None, end_unix=None):
         if start_unix and end_unix:
             url = f"{self.base_url}/air_pollution/history?lat={self.lat}&lon={self.lon}&start={start_unix}&end={end_unix}&appid={self.api_key}"
@@ -213,6 +266,7 @@ class OpenWeatherDataCollector:
         df["us_aqi"] = df.apply(lambda row: max(row['pm2_5_aqi'], row['pm10_aqi']) if pd.notna(row.get('pm2_5_aqi')) and pd.notna(row.get('pm10_aqi')) else None, axis=1)
         return df
 
+    @retry_on_network_error()
     def fetch_weather(self, dt_unix=None):
         url = f"{self.base_url}/weather?lat={self.lat}&lon={self.lon}&appid={self.api_key}&units=metric"
         resp = requests.get(url, timeout=10)
@@ -254,6 +308,7 @@ class OpenWeatherDataCollector:
         # Note: CSV saving is handled in collect_current_data_with_iqair()
         return df_pollution
 
+@retry_on_network_error()
 def fetch_iqair_aqi():
     url = f"https://api.airvisual.com/v2/nearest_city?lat={OPENWEATHER_CONFIG['lat']}&lon={OPENWEATHER_CONFIG['lon']}&key={IQAIR_CONFIG['api_key']}"
     try:
@@ -266,6 +321,7 @@ def fetch_iqair_aqi():
         logger.warning(f"IQAir API error: {e}")
     return None
 
+@retry_on_network_error(max_retries=2, delay=180)  # 2 retries, start with 3 minutes
 def collect_current_data_with_iqair():
     df = OpenWeatherDataCollector().collect_current_data()
     iqair_aqi = fetch_iqair_aqi()
