@@ -235,7 +235,10 @@ class AQIFeatureEngineer:
                 time_diffs = [(idx - target_time).total_seconds() for idx in matching_indices]
                 min_diff_idx = np.argmin(np.abs(time_diffs))
                 closest_idx = matching_indices[min_diff_idx]
-                lag_series.iloc[i] = df.loc[closest_idx, target]
+                
+                # Handle potential duplicate timestamps by ensuring scalar value
+                value = df.loc[closest_idx, target]
+                lag_series.iloc[i] = value if np.isscalar(value) else value.iloc[0]
             else:
                 lag_series.iloc[i] = np.nan
         
@@ -301,7 +304,10 @@ class AQIFeatureEngineer:
                 time_diffs = [(idx - target_time).total_seconds() for idx in matching_indices]
                 min_diff_idx = np.argmin(np.abs(time_diffs))
                 closest_idx = matching_indices[min_diff_idx]
+                
+                # Handle potential duplicate timestamps by ensuring scalar value
                 previous_value = df.loc[closest_idx, target]
+                previous_value = previous_value if np.isscalar(previous_value) else previous_value.iloc[0]
                 
                 if not pd.isna(previous_value) and previous_value != 0:
                     change_rate_series.iloc[i] = (current_value - previous_value) / previous_value
