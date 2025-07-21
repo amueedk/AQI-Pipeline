@@ -193,21 +193,19 @@ class AQIFeatureEngineer:
     
     def _get_tolerance(self, period: int, feature_type: str = 'lag') -> timedelta:
         """
-        Get tolerance based on period and feature type with improved caps
+        Get tolerance based on period and feature type with custom specifications
         """
         if feature_type == 'lag' or feature_type == 'change_rate':
-            # Custom tolerance caps for better temporal precision
+            # Custom tolerance specifications
             if period == 1:
-                tolerance_hours = 0.5  # ±30min for 1h (50% - fine as-is)
+                tolerance_hours = 0.5  # ±30min for 1h
+            elif period == 2:
+                tolerance_hours = 0.75  # ±45min for 2h
             elif period == 3:
-                tolerance_hours = 50/60  # ±50min for 3h (cap to 50min)
-            elif period == 12:
-                tolerance_hours = 3.0  # ±3h for 12h (cap to 3h)
-            elif period >= 24:
-                tolerance_hours = 5.0  # ±5h for 24h+ (cap to 5h)
+                tolerance_hours = 50/60  # ±50min for 3h
             else:
-                # For any other periods, use 50% but cap at 5h
-                tolerance_hours = min(5.0, period * 0.5)
+                # All other periods (6h, 12h, 24h, 48h, 72h) get 1h tolerance
+                tolerance_hours = 1.0
             return timedelta(hours=tolerance_hours)
         elif feature_type == 'rolling':
             # Rolling features don't use tolerance anyway (uses ALL data in window)
