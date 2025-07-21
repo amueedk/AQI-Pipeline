@@ -193,19 +193,25 @@ class AQIFeatureEngineer:
     
     def _get_tolerance(self, period: int, feature_type: str = 'lag') -> timedelta:
         """
-        Get tolerance based on period and feature type
+        Get tolerance based on period and feature type with improved caps
         """
-        if feature_type == 'lag':
-            # Proportional tolerance: 50% of the period
-            tolerance_hours = period * 0.5
+        if feature_type == 'lag' or feature_type == 'change_rate':
+            # Custom tolerance caps for better temporal precision
+            if period == 1:
+                tolerance_hours = 0.5  # ±30min for 1h (50% - fine as-is)
+            elif period == 3:
+                tolerance_hours = 50/60  # ±50min for 3h (cap to 50min)
+            elif period == 12:
+                tolerance_hours = 3.0  # ±3h for 12h (cap to 3h)
+            elif period >= 24:
+                tolerance_hours = 5.0  # ±5h for 24h+ (cap to 5h)
+            else:
+                # For any other periods, use 50% but cap at 5h
+                tolerance_hours = min(5.0, period * 0.5)
             return timedelta(hours=tolerance_hours)
         elif feature_type == 'rolling':
-            # For rolling, use 25% of the window as tolerance for gaps
+            # Rolling features don't use tolerance anyway (uses ALL data in window)
             tolerance_hours = period * 0.25
-            return timedelta(hours=tolerance_hours)
-        else:  # change_rate
-            # For change rate, use 50% of the period
-            tolerance_hours = period * 0.5
             return timedelta(hours=tolerance_hours)
     
     def _create_time_based_lag(self, df: pd.DataFrame, target: str, lag_hours: int) -> pd.Series:

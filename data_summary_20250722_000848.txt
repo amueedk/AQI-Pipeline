@@ -1,0 +1,63 @@
+=== HOPSWORKS DATA SUMMARY ===
+
+Total Records: 855
+Date Range: 0 to 854
+Columns: 127
+Column Names: ['temperature', 'humidity', 'pressure', 'wind_speed', 'wind_direction', 'carbon_monoxide', 'no', 'nitrogen_dioxide', 'ozone', 'sulphur_dioxide', 'pm2_5', 'pm10', 'nh3', 'openweather_aqi', 'pm2_5_aqi', 'pm10_aqi', 'us_aqi', 'hour_sin', 'hour_cos', 'day_sin', 'day_cos', 'month_sin', 'month_cos', 'day_of_week_sin', 'day_of_week_cos', 'is_spring', 'is_summer', 'is_autumn', 'is_winter', 'is_night', 'is_morning_rush', 'is_evening_rush', 'pm2_5_lag_1h', 'pm2_5_lag_2h', 'pm2_5_lag_3h', 'pm2_5_lag_6h', 'pm2_5_lag_12h', 'pm2_5_lag_24h', 'pm2_5_lag_48h', 'pm2_5_lag_72h', 'pm2_5_rolling_mean_3h', 'pm2_5_rolling_std_3h', 'pm2_5_rolling_min_3h', 'pm2_5_rolling_max_3h', 'pm2_5_rolling_mean_6h', 'pm2_5_rolling_std_6h', 'pm2_5_rolling_min_6h', 'pm2_5_rolling_max_6h', 'pm2_5_rolling_mean_12h', 'pm2_5_rolling_std_12h', 'pm2_5_rolling_min_12h', 'pm2_5_rolling_max_12h', 'pm2_5_rolling_mean_24h', 'pm2_5_rolling_std_24h', 'pm2_5_rolling_min_24h', 'pm2_5_rolling_max_24h', 'pm2_5_change_rate_1h', 'pm2_5_change_rate_6h', 'pm2_5_change_rate_24h', 'pm10_lag_1h', 'pm10_lag_2h', 'pm10_lag_3h', 'pm10_lag_6h', 'pm10_lag_12h', 'pm10_lag_24h', 'pm10_lag_48h', 'pm10_lag_72h', 'pm10_rolling_mean_3h', 'pm10_rolling_std_3h', 'pm10_rolling_min_3h', 'pm10_rolling_max_3h', 'pm10_rolling_mean_6h', 'pm10_rolling_std_6h', 'pm10_rolling_min_6h', 'pm10_rolling_max_6h', 'pm10_rolling_mean_12h', 'pm10_rolling_std_12h', 'pm10_rolling_min_12h', 'pm10_rolling_max_12h', 'pm10_rolling_mean_24h', 'pm10_rolling_std_24h', 'pm10_rolling_min_24h', 'pm10_rolling_max_24h', 'pm10_change_rate_1h', 'pm10_change_rate_6h', 'pm10_change_rate_24h', 'temp_squared', 'temp_cubed', 'temp_change_rate', 'is_hot', 'is_cold', 'humidity_squared', 'is_high_humidity', 'is_low_humidity', 'wind_speed_squared', 'is_high_wind', 'is_calm', 'pressure_change_rate', 'is_low_pressure', 'is_high_pressure', 'pm2_5_squared', 'pm2_5_change_rate', 'is_high_pm2_5', 'is_low_pm2_5', 'pm10_squared', 'pm10_change_rate', 'is_high_pm10', 'is_low_pm10', 'no2_squared', 'no2_change_rate', 'is_high_no2', 'o3_squared', 'o3_change_rate', 'is_high_o3', 'co_squared', 'co_change_rate', 'is_high_co', 'so2_squared', 'so2_change_rate', 'is_high_so2', 'temp_humidity_interaction', 'temp_wind_interaction', 'pm2_5_temp_interaction', 'pm2_5_humidity_interaction', 'wind_pm2_5_interaction', 'time', 'time_str']
+
+=== DATA TYPES ===
+temperature                                   float64
+humidity                                      float64
+pressure                                      float64
+wind_speed                                    float64
+wind_direction                                float64
+                                       ...           
+pm2_5_temp_interaction                        float64
+pm2_5_humidity_interaction                    float64
+wind_pm2_5_interaction                        float64
+time                          datetime64[us, Etc/UTC]
+time_str                                       object
+Length: 127, dtype: object
+
+=== BASIC STATISTICS ===
+       temperature    humidity     pressure  wind_speed  ...  temp_wind_interaction  pm2_5_temp_interaction  pm2_5_humidity_interaction  wind_pm2_5_interaction
+count   855.000000  855.000000   855.000000  855.000000  ...             855.000000              855.000000                  855.000000              855.000000
+mean     34.602117   57.318129   995.549708    3.428596  ...             120.693465             1288.011290                 2129.247743              118.834499
+std       3.874906   13.810675     2.907963    2.266924  ...              82.716925              542.753661                 1035.010947               92.264326
+min      24.940000   25.000000   988.000000    0.000000  ...               0.000000                0.000000                    0.000000                0.000000
+25%      31.940000   47.000000   993.000000    2.060000  ...              74.036400              840.971950                 1397.305000               68.134500
+50%      34.940000   55.000000   995.000000    3.090000  ...             111.054600             1224.228600                 1902.160000              107.985200
+75%      36.940000   66.000000   998.000000    4.120000  ...             156.560000             1627.544400                 2631.355000              157.435500
+max      44.510000  100.000000  1002.000000   17.490000  ...             681.060600             3112.254600                 5968.530000              827.855700
+
+[8 rows x 125 columns]
+
+=== FIRST 10 ROWS ===
+   temperature  humidity  pressure  wind_speed  ...  pm2_5_humidity_interaction  wind_pm2_5_interaction                      time             time_str
+0        34.94      55.0     995.0        4.12  ...                     1460.25                109.3860 2025-06-25 20:00:00+00:00  2025-06-25 20:00:00
+1        33.94      70.0     993.0        5.14  ...                     1132.60                 83.1652 2025-07-08 12:00:00+00:00  2025-07-08 12:00:00
+2        37.94      44.0     994.0        7.20  ...                     1810.16                296.2080 2025-06-24 06:00:00+00:00  2025-06-24 06:00:00
+3        30.94      70.0     998.0        0.00  ...                     2367.40                  0.0000 2025-07-10 04:00:00+00:00  2025-07-10 04:00:00
+4        32.94      66.0     996.0        5.14  ...                     2164.80                168.5920 2025-07-01 03:00:00+00:00  2025-07-01 03:00:00
+5        29.94      74.0     996.0        4.12  ...                     1554.00                 86.5200 2025-07-08 03:00:00+00:00  2025-07-08 03:00:00
+6        33.94      62.0     994.0        2.06  ...                     1915.18                 63.6334 2025-06-23 00:00:00+00:00  2025-06-23 00:00:00
+7        39.94      44.0     996.0        4.12  ...                     1435.28                134.3944 2025-07-03 08:00:00+00:00  2025-07-03 08:00:00
+8        35.94      59.0     995.0        2.06  ...                      906.24                 31.6416 2025-06-27 14:00:00+00:00  2025-06-27 14:00:00
+9        32.94      62.0    1002.0        3.09  ...                     2883.62                143.7159 2025-07-12 06:00:00+00:00  2025-07-12 06:00:00
+
+[10 rows x 127 columns]
+
+=== LAST 10 ROWS ===
+     temperature  humidity  pressure  wind_speed  ...  pm2_5_humidity_interaction  wind_pm2_5_interaction                      time             time_str
+845        38.00      47.0     997.0        4.12  ...                      776.44                 68.0624 2025-07-21 09:19:15+00:00  2025-07-21 09:19:15
+846        38.00      47.0     996.0        5.14  ...                      670.22                 73.2964 2025-07-21 10:13:00+00:00  2025-07-21 10:13:00
+847        38.00      47.0     995.0        3.09  ...                      604.42                 39.7374 2025-07-21 11:10:21+00:00  2025-07-21 11:10:21
+848        38.00      47.0     995.0        4.12  ...                      562.59                 49.3164 2025-07-21 12:21:54+00:00  2025-07-21 12:21:54
+849        37.00      53.0     996.0        3.09  ...                      775.92                 45.2376 2025-07-21 13:32:46+00:00  2025-07-21 13:32:46
+850        36.00      56.0     996.0        4.12  ...                      819.84                 60.3168 2025-07-21 14:13:52+00:00  2025-07-21 14:13:52
+851        36.00      56.0     997.0        3.09  ...                      920.08                 50.7687 2025-07-21 15:12:03+00:00  2025-07-21 15:12:03
+852        34.95      46.0     997.0        5.24  ...                     1120.56                127.6464 2025-07-21 16:13:10+00:00  2025-07-21 16:13:10
+853        36.30      47.0     997.0        5.06  ...                     1247.85                134.3430 2025-07-21 17:13:08+00:00  2025-07-21 17:13:08
+854        34.00      66.0     998.0        3.09  ...                     1859.88                 87.0762 2025-07-21 18:16:08+00:00  2025-07-21 18:16:08
+
+[10 rows x 127 columns]
