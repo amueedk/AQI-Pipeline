@@ -214,15 +214,15 @@ def fetch_historic_pollution_batch(start_unix, end_unix, max_records_per_call=24
 
 def collect_historical_data_june_to_july_2025():
     """
-    Collect historical data for June 16, 2025 to July 18, 2025 with timestamp matching.
+    Collect historical data for June 16, 2025 to July 21, 2025 with timestamp matching.
     Uses multiple API calls to work around record limits.
     Returns DataFrame with matched weather and pollution data.
     """
-    logger.info("Collecting historical data for June 16, 2025 to July 18, 2025...")
+    logger.info("Collecting historical data for June 16, 2025 to July 21, 2025...")
     
-    # Define date range: June 16, 2025 00:00 UTC to July 18, 2025 23:59 UTC
+    # Define date range: June 16, 2025 00:00 UTC to July 21, 2025 23:59 UTC
     start_date = datetime(2025, 6, 16, 0, 0, 0, tzinfo=None)  # June 16, 2025 00:00
-    end_date = datetime(2025, 7, 18, 23, 59, 59, tzinfo=None)  # July 18, 2025 23:59
+    end_date = datetime(2025, 7, 21, 23, 59, 59, tzinfo=None)  # July 21, 2025 23:59
     
     # Convert to Unix timestamps
     start_unix = int(start_date.timestamp())
@@ -318,7 +318,7 @@ def run_manual_backfill_csv_and_hopsworks():
         return False
 
     # 2. Collect Historical Data
-    logger.info("STEP 2: Collecting historical data for June 16, 2025 to July 18, 2025...")
+    logger.info("STEP 2: Collecting historical data for June 16, 2025 to July 21, 2025...")
     raw_df = collect_historical_data_june_to_july_2025()
     if raw_df.empty:
         logger.error("Data collection failed. No data to process. Aborting.")
@@ -326,7 +326,7 @@ def run_manual_backfill_csv_and_hopsworks():
     logger.info(f"Successfully collected {len(raw_df)} records.")
 
     # Save raw data as CSV for reference
-    raw_data_path = "data/raw_historical_data_june16_july18_2025.csv"
+    raw_data_path = "data/raw_historical_data_june16_july21_2025.csv"
     os.makedirs("data", exist_ok=True)
     raw_df.to_csv(raw_data_path, index=False)
     logger.info(f"Raw data saved to {raw_data_path}")
@@ -360,7 +360,7 @@ def run_manual_backfill_csv_and_hopsworks():
 
     # 4. Save to CSV
     logger.info("\nSTEP 4: Saving engineered features to CSV...")
-    engineered_data_path = "data/engineered_features_june16_july18_2025.csv"
+    engineered_data_path = "data/engineered_features_june16_july21_2025.csv"
     engineered_df.to_csv(engineered_data_path, index=False)
     
     logger.info(f"Engineered features saved to {engineered_data_path}")
@@ -376,7 +376,7 @@ def run_manual_backfill_csv_and_hopsworks():
         logger.info("✓ Added CSV files to git staging")
         
         # Commit with descriptive message
-        commit_message = f"Add historical data for June 16-July 18, 2025 ({len(engineered_df)} records)"
+        commit_message = f"Add historical data for June 16-July 21, 2025 ({len(engineered_df)} records)"
         subprocess.run(["git", "commit", "-m", commit_message], check=True)
         logger.info(f"✓ Committed CSV files: {commit_message}")
         
@@ -397,7 +397,7 @@ def run_manual_backfill_csv_and_hopsworks():
     success = uploader.push_features(
         df=engineered_df,
         group_name=HOPSWORKS_CONFIG['feature_group_name'],
-        description="Historical backfill of PM2.5 and PM10 prediction features for Multan (June 16-July 18, 2025). Targets: pm2_5, pm10 (raw concentrations), Reference: us_aqi (final AQI)."
+        description="Historical backfill of PM2.5 and PM10 prediction features for Multan (June 16-July 21, 2025). Targets: pm2_5, pm10 (raw concentrations), Reference: us_aqi (final AQI)."
     )
     
     if not success:
