@@ -193,51 +193,43 @@ def run_hourly_update():
         raw_df["latitude"] = raw_df["latitude"].iloc[0] if "latitude" in raw_df.columns else 30.1575
         raw_df["longitude"] = raw_df["longitude"].iloc[0] if "longitude" in raw_df.columns else 71.5249
         
-        # Engineer features for new data only
-        logger.info("Engineering features for new data...")
-        engineer = AQIFeatureEngineer()
-        new_engineered_df = engineer.engineer_features(raw_df)
-        
-        if new_engineered_df.empty:
-            logger.error("Feature engineering for new data resulted in an empty DataFrame. Aborting.")
-            return False
-        
-        logger.info(f"Successfully engineered features for new data: {new_engineered_df.shape[1]} features.")
-        
-        # Combine existing engineered data with new engineered data
-        logger.info(f"Combining existing data ({len(existing_df)} records) with new data ({len(new_engineered_df)} records)")
+        # Combine existing and new data BEFORE feature engineering
+        logger.info(f"Combining existing data ({len(existing_df)} records) with new raw data ({len(raw_df)} records)")
         logger.info(f"Existing data columns: {list(existing_df.columns)}")
-        logger.info(f"New data columns: {list(new_engineered_df.columns)}")
+        logger.info(f"New raw data columns: {list(raw_df.columns)}")
         
-        combined_df = pd.concat([existing_df, new_engineered_df], axis=0)
-        
-        # Robust timezone fix: always convert to UTC, then to naive
-        logger.info("Fixing timezone consistency for sorting...")
-        combined_df.index = pd.to_datetime(combined_df.index, utc=True, errors='coerce')
-        if isinstance(combined_df.index, pd.DatetimeIndex) and combined_df.index.tz is not None:
-            logger.info("Converting timezone-aware timestamps to timezone-naive...")
-            combined_df.index = combined_df.index.tz_localize(None)
-        combined_df = combined_df.sort_index()  # Sort by time
-        
-        logger.info(f"Combined dataset: {len(existing_df)} existing + {len(new_engineered_df)} new = {len(combined_df)} total records")
-        
-        # Extract only raw features from the combined dataset before re-engineering
-        logger.info("Extracting raw features for re-engineering...")
+        # Extract raw features from existing data for combination
+        logger.info("Extracting raw features from existing data...")
         raw_features = ['temperature', 'humidity', 'pressure', 'wind_speed', 'wind_direction',
                        'carbon_monoxide', 'no', 'nitrogen_dioxide', 'ozone', 'sulphur_dioxide', 
                        'pm2_5', 'pm10', 'nh3', 'openweather_aqi', 'pm2_5_aqi', 'pm10_aqi', 'us_aqi',
                        'city', 'latitude', 'longitude']
         
-        # Get only raw features from combined dataset
-        available_raw_features = [col for col in raw_features if col in combined_df.columns]
-        combined_raw_df = combined_df[available_raw_features].copy()
+        # Get only raw features from existing data
+        available_raw_features = [col for col in raw_features if col in existing_df.columns]
+        existing_raw_df = existing_df[available_raw_features].copy()
         
-        logger.info(f"Extracted {len(available_raw_features)} raw features for re-engineering")
+        logger.info(f"Extracted {len(available_raw_features)} raw features from existing data")
+        logger.info(f"Existing raw data shape: {existing_raw_df.shape}")
+        
+        # Combine raw data (existing + new)
+        combined_raw_df = pd.concat([existing_raw_df, raw_df], axis=0)
+        
+        # Robust timezone fix: always convert to UTC, then to naive
+        logger.info("Fixing timezone consistency for sorting...")
+        combined_raw_df.index = pd.to_datetime(combined_raw_df.index, utc=True, errors='coerce')
+        if isinstance(combined_raw_df.index, pd.DatetimeIndex) and combined_raw_df.index.tz is not None:
+            logger.info("Converting timezone-aware timestamps to timezone-naive...")
+            combined_raw_df.index = combined_raw_df.index.tz_localize(None)
+        combined_raw_df = combined_raw_df.sort_index()  # Sort by time
+        
+        logger.info(f"Combined raw dataset: {len(existing_raw_df)} existing + {len(raw_df)} new = {len(combined_raw_df)} total records")
         logger.info(f"Combined raw data shape: {combined_raw_df.shape}")
         logger.info(f"Date range: {combined_raw_df.index.min()} to {combined_raw_df.index.max()}")
+        logger.info(f"Sample timestamps: {list(combined_raw_df.index[-5:])}")  # Last 5 timestamps
         
-        # Re-engineer features on the raw combined dataset
-        logger.info("Re-engineering features on raw combined dataset...")
+        # Engineer features on the complete combined raw dataset
+        logger.info("Engineering features on complete combined raw dataset...")
         engineer = AQIFeatureEngineer()
         engineered_df = engineer.engineer_features(combined_raw_df)
         

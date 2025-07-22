@@ -173,7 +173,9 @@ class AQIFeatureEngineer:
         logger.info(f"DEBUG: Creating lag features for dataset with {len(df)} records")
         logger.info(f"DEBUG: Date range: {df.index.min()} to {df.index.max()}")
         logger.info(f"DEBUG: Sample timestamps: {list(df.index[:5])}")
+        logger.info(f"DEBUG: Last 5 timestamps: {list(df.index[-5:])}")
         logger.info(f"DEBUG: Target columns: {self.target_columns}")
+        logger.info(f"DEBUG: Available columns: {list(df.columns)}")
         
         # Create lag features for both target variables (PM2.5 and PM10)
         for target in self.target_columns:
@@ -259,7 +261,6 @@ class AQIFeatureEngineer:
                     logger.info(f"  Matching values: {list(matching_data.values)}")
                 else:
                     logger.info(f"  No matching data found")
-                debug_count += 1
             
             if len(matching_data) > 0:
                 # Use the closest data point to target_time
