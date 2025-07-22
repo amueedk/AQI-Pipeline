@@ -51,6 +51,33 @@ def fetch_existing_hopsworks_data(uploader, group_name):
             logger.info("No existing data found in Hopsworks feature group.")
             return pd.DataFrame()
         
+        # Fix timestamp handling - ensure proper datetime index
+        logger.info("Fixing timestamp handling for existing data...")
+        if 'time' in df.columns:
+            # Convert time column to proper datetime
+            df['time'] = pd.to_datetime(df['time'], errors='coerce')
+            # Set as index
+            df.set_index('time', inplace=True)
+            # Remove time_str column if it exists (it's just for Hopsworks primary key)
+            if 'time_str' in df.columns:
+                df = df.drop(columns=['time_str'])
+        elif isinstance(df.index, pd.DatetimeIndex):
+            # Index is already datetime, but let's ensure it's proper
+            df.index = pd.to_datetime(df.index, errors='coerce')
+        else:
+            logger.error("No 'time' column found and index is not datetime. Cannot proceed.")
+            return pd.DataFrame()
+        
+        # Remove any rows with invalid timestamps
+        invalid_timestamps = df.index.isna()
+        if invalid_timestamps.any():
+            logger.warning(f"Found {invalid_timestamps.sum()} rows with invalid timestamps. Removing them.")
+            df = df[~invalid_timestamps]
+        
+        if df.empty:
+            logger.warning("No valid data remaining after timestamp cleanup.")
+            return pd.DataFrame()
+        
         logger.info(f"Successfully fetched {len(df)} existing records from Hopsworks.")
         logger.info(f"Existing data date range: {df.index.min()} to {df.index.max()}")
         logger.info(f"Existing data columns: {list(df.columns)}")
@@ -59,6 +86,11 @@ def fetch_existing_hopsworks_data(uploader, group_name):
         if lag_columns:
             sample_lags = df[lag_columns].head(3)
             logger.info(f"First 3 rows of lag features:\n{sample_lags}")
+        
+        # Debug: Check timestamp format
+        logger.info(f"Timestamp sample (first 3): {list(df.index[:3])}")
+        logger.info(f"Timestamp type: {type(df.index)}")
+        
         return df
         
     except Exception as e:
@@ -215,6 +247,12 @@ def run_hourly_update():
         # Combine raw data (existing + new)
         combined_raw_df = pd.concat([existing_raw_df, raw_df], axis=0)
         
+        # Debug: Check timestamps before processing
+        logger.info("DEBUG: Checking timestamps before processing...")
+        logger.info(f"Existing data timestamp sample: {list(existing_raw_df.index[:3])}")
+        logger.info(f"New data timestamp sample: {list(raw_df.index[:3])}")
+        logger.info(f"Combined data timestamp sample: {list(combined_raw_df.index[:5])}")
+        
         # Robust timezone fix: always convert to UTC, then to naive
         logger.info("Fixing timezone consistency for sorting...")
         combined_raw_df.index = pd.to_datetime(combined_raw_df.index, utc=True, errors='coerce')
@@ -222,6 +260,12 @@ def run_hourly_update():
             logger.info("Converting timezone-aware timestamps to timezone-naive...")
             combined_raw_df.index = combined_raw_df.index.tz_localize(None)
         combined_raw_df = combined_raw_df.sort_index()  # Sort by time
+        
+        # Debug: Check timestamps after processing
+        logger.info("DEBUG: Checking timestamps after processing...")
+        logger.info(f"Final combined data timestamp sample: {list(combined_raw_df.index[:5])}")
+        logger.info(f"Timestamp type: {type(combined_raw_df.index)}")
+        logger.info(f"Any NaT timestamps: {combined_raw_df.index.isna().any()}")
         
         logger.info(f"Combined raw dataset: {len(existing_raw_df)} existing + {len(raw_df)} new = {len(combined_raw_df)} total records")
         logger.info(f"Combined raw data shape: {combined_raw_df.shape}")
