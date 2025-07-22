@@ -1,15 +1,14 @@
 name: Hourly AQI Data Pipeline
 
 on:
-  schedule:
-    # Runs at the beginning of every hour
-    - cron: '0 * * * *'
-  workflow_dispatch:
-    # Allows manual triggering from the GitHub UI
+  workflow_dispatch:  # Manual trigger
+  repository_dispatch:  # External API trigger
+    types: [hourly-trigger]
 
 jobs:
   hourly-update:
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # Add timeout
     permissions:
       contents: write
     steps:
@@ -20,7 +19,7 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
-          cache: 'pip' # Cache dependencies
+          cache: 'pip'
 
       - name: Install Python dependencies
         run: |
@@ -32,29 +31,13 @@ jobs:
           mkdir -p logs
           mkdir -p data
 
-      - name: Pull latest data from repo
-        run: |
-          git config --global user.email "action@github.com"
-          git config --global user.name "GitHub Action"
-          git pull origin main --allow-unrelated-histories --rebase
-
       - name: Run automated hourly update script
-        # This script handles data collection, feature engineering,
-        # and pushing to Hopsworks with proper lag/rolling feature handling.
         run: |
           python automated_hourly_run.py
         env:
           HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
           OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
           IQAIR_API_KEY: ${{ secrets.IQAIR_API_KEY }}
-
-      # - name: Commit and push AQI validation data files
-      #   run: |
-      #     git config --local user.email "action@github.com"
-      #     git config --local user.name "GitHub Action"
-      #     git add data/aqi_validation_current_*.csv
-      #     git diff --quiet && git diff --staged --quiet || git commit -m "Update AQI validation data - ${{ github.run_number }}"
-      #     git push https://x-access-token:${{ secrets.GH_PAT }}@github.com/${{ github.repository }} HEAD:main
 
       - name: Upload logs and data on failure
         if: failure()
@@ -65,4 +48,4 @@ jobs:
             automated_run.log
             logs/
             data/
-          retention-days: 7 
+          retention-days: 7
