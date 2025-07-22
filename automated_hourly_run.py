@@ -52,6 +52,13 @@ def fetch_existing_hopsworks_data(uploader, group_name):
             return pd.DataFrame()
         
         logger.info(f"Successfully fetched {len(df)} existing records from Hopsworks.")
+        logger.info(f"Existing data date range: {df.index.min()} to {df.index.max()}")
+        logger.info(f"Existing data columns: {list(df.columns)}")
+        logger.info(f"Sample of existing data lag features:")
+        lag_columns = [col for col in df.columns if 'lag' in col]
+        if lag_columns:
+            sample_lags = df[lag_columns].head(3)
+            logger.info(f"First 3 rows of lag features:\n{sample_lags}")
         return df
         
     except Exception as e:
@@ -151,11 +158,38 @@ def run_hourly_update():
     # 4. Combine existing and new data for proper feature engineering
     logger.info("\nSTEP 4: Combining existing and new data...")
     if not existing_df.empty:
-        # If we have existing data, we need to handle the schema properly
-        # The existing data will have all engineered features, but new data only has raw features
+        # The existing data already has all engineered features from the manual run
+        # We need to engineer features for new data and combine properly
         
-        # For the new data, we'll engineer features separately and then combine
-        logger.info("Engineering features for new data only...")
+        logger.info("Processing new data with existing historical context...")
+        
+        # Ensure both DataFrames have the same index type
+        logger.info("Ensuring consistent index types...")
+        if isinstance(existing_df.index, pd.DatetimeIndex):
+            raw_df.index = pd.to_datetime(raw_df.index)
+        elif isinstance(raw_df.index, pd.DatetimeIndex):
+            existing_df.index = pd.to_datetime(existing_df.index)
+        
+        # Remove any new data that already exists in Hopsworks
+        existing_timestamps = set(existing_df.index)
+        new_timestamps = set(raw_df.index)
+        duplicate_timestamps = new_timestamps.intersection(existing_timestamps)
+        
+        if duplicate_timestamps:
+            logger.warning(f"Found {len(duplicate_timestamps)} duplicate timestamps. Removing duplicates.")
+            raw_df = raw_df[~raw_df.index.isin(duplicate_timestamps)]
+        
+        if raw_df.empty:
+            logger.warning("No new unique data to add after removing duplicates.")
+            return True
+        
+        # Add location metadata to new data
+        raw_df["city"] = raw_df["city"].iloc[0] if "city" in raw_df.columns else "Multan"
+        raw_df["latitude"] = raw_df["latitude"].iloc[0] if "latitude" in raw_df.columns else 30.1575
+        raw_df["longitude"] = raw_df["longitude"].iloc[0] if "longitude" in raw_df.columns else 71.5249
+        
+        # Engineer features for new data only
+        logger.info("Engineering features for new data...")
         engineer = AQIFeatureEngineer()
         new_engineered_df = engineer.engineer_features(raw_df)
         
@@ -163,33 +197,13 @@ def run_hourly_update():
             logger.error("Feature engineering for new data resulted in an empty DataFrame. Aborting.")
             return False
         
-        logger.info(f"Successfully engineered {new_engineered_df.shape[1]} features for new data.")
+        logger.info(f"Successfully engineered features for new data: {new_engineered_df.shape[1]} features.")
         
-        # Now combine the existing engineered data with new engineered data
-        # We need to ensure the new data doesn't duplicate existing timestamps
-        # First, ensure both DataFrames have the same index type
-        logger.info("Ensuring consistent index types...")
+        # Combine existing engineered data with new engineered data
+        logger.info(f"Combining existing data ({len(existing_df)} records) with new data ({len(new_engineered_df)} records)")
+        logger.info(f"Existing data columns: {list(existing_df.columns)}")
+        logger.info(f"New data columns: {list(new_engineered_df.columns)}")
         
-        # Convert new data index to match existing data index type
-        if isinstance(existing_df.index, pd.DatetimeIndex):
-            new_engineered_df.index = pd.to_datetime(new_engineered_df.index)
-        elif isinstance(new_engineered_df.index, pd.DatetimeIndex):
-            existing_df.index = pd.to_datetime(existing_df.index)
-        
-        existing_timestamps = set(existing_df.index)
-        new_timestamps = set(new_engineered_df.index)
-        
-        # Remove any new data that already exists in Hopsworks
-        duplicate_timestamps = new_timestamps.intersection(existing_timestamps)
-        if duplicate_timestamps:
-            logger.warning(f"Found {len(duplicate_timestamps)} duplicate timestamps. Removing duplicates.")
-            new_engineered_df = new_engineered_df[~new_engineered_df.index.isin(duplicate_timestamps)]
-        
-        if new_engineered_df.empty:
-            logger.warning("No new unique data to add after removing duplicates.")
-            return True
-        
-        # Combine existing and new data
         combined_df = pd.concat([existing_df, new_engineered_df], axis=0)
         
         # Robust timezone fix: always convert to UTC, then to naive
@@ -202,10 +216,25 @@ def run_hourly_update():
         
         logger.info(f"Combined dataset: {len(existing_df)} existing + {len(new_engineered_df)} new = {len(combined_df)} total records")
         
-        # Re-engineer features on the combined dataset
-        logger.info("Re-engineering features on combined dataset...")
+        # Extract only raw features from the combined dataset before re-engineering
+        logger.info("Extracting raw features for re-engineering...")
+        raw_features = ['temperature', 'humidity', 'pressure', 'wind_speed', 'wind_direction',
+                       'carbon_monoxide', 'nitrogen_dioxide', 'ozone', 'sulphur_dioxide', 
+                       'pm2_5', 'pm10', 'nh3', 'openweather_aqi', 'pm2_5_aqi', 'pm10_aqi', 'us_aqi',
+                       'city', 'latitude', 'longitude']
+        
+        # Get only raw features from combined dataset
+        available_raw_features = [col for col in raw_features if col in combined_df.columns]
+        combined_raw_df = combined_df[available_raw_features].copy()
+        
+        logger.info(f"Extracted {len(available_raw_features)} raw features for re-engineering")
+        logger.info(f"Combined raw data shape: {combined_raw_df.shape}")
+        logger.info(f"Date range: {combined_raw_df.index.min()} to {combined_raw_df.index.max()}")
+        
+        # Re-engineer features on the raw combined dataset
+        logger.info("Re-engineering features on raw combined dataset...")
         engineer = AQIFeatureEngineer()
-        engineered_df = engineer.engineer_features(combined_df)
+        engineered_df = engineer.engineer_features(combined_raw_df)
         
         if engineered_df.empty:
             logger.error("Feature engineering on combined dataset resulted in an empty DataFrame. Aborting.")
