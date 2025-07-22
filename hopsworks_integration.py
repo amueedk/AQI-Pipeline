@@ -112,29 +112,13 @@ class HopsworksUploader:
                 description=description,
                 primary_key=['time_str'],
                 event_time='time',
-                online_enabled=False,  # Always offline, no Kafka required
-                write_options={"wait_for_job": True}
+                online_enabled=False  # Always offline, no Kafka required
             )
 
             logger.info(f"Inserting {len(df_to_insert)} rows into feature group '{group_name}'...")
-            try:
-                fg.insert(df_to_insert, write_options={"wait_for_job": True})
-                logger.info("Successfully inserted data into Hopsworks.")
-                return True
-            except Exception as kafka_error:
-                if "Kafka" in str(kafka_error) or "confluent" in str(kafka_error).lower():
-                    logger.warning("Kafka error detected, trying offline insert...")
-                    try:
-                        # Try offline insert without Kafka
-                        fg.insert(df_to_insert, write_options={"wait_for_job": True, "offline": True})
-                        logger.info("Successfully inserted data into Hopsworks (offline mode).")
-                        return True
-                    except Exception as offline_error:
-                        logger.error(f"Offline insert also failed: {offline_error}")
-                        return False
-                else:
-                    logger.error(f"Non-Kafka insert error: {kafka_error}")
-                    return False
+            fg.insert(df_to_insert, write_options={"wait_for_job": True})
+            logger.info("Successfully inserted data into Hopsworks.")
+            return True
         except Exception as e:
             logger.error(f"Failed to insert data into Hopsworks: {e}")
             return False

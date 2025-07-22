@@ -371,6 +371,15 @@ def run_manual_backfill_csv_and_hopsworks():
     logger.info("\nSTEP 5: Committing CSV files to Git...")
     try:
         import subprocess
+        
+        # Configure Git user (if not already configured)
+        try:
+            subprocess.run(["git", "config", "--local", "user.email", "action@github.com"], check=True)
+            subprocess.run(["git", "config", "--local", "user.name", "GitHub Action"], check=True)
+            logger.info("✓ Configured Git user")
+        except subprocess.CalledProcessError:
+            logger.info("Git user already configured or not needed")
+        
         # Add the CSV files to git
         subprocess.run(["git", "add", raw_data_path, engineered_data_path], check=True)
         logger.info("✓ Added CSV files to git staging")
