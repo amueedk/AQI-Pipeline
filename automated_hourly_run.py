@@ -141,6 +141,11 @@ def run_hourly_update():
         'so2': 'sulphur_dioxide'
     }
     raw_df = raw_df.rename(columns=rename_map)
+    
+    # Ensure 'no' column exists (nitric oxide from OpenWeather API)
+    if 'no' not in raw_df.columns:
+        logger.warning("'no' column missing from API response. Adding with NaN values.")
+        raw_df['no'] = None
 
     # Save AQI validation data as CSV (for your reference only)
     import datetime
@@ -219,7 +224,7 @@ def run_hourly_update():
         # Extract only raw features from the combined dataset before re-engineering
         logger.info("Extracting raw features for re-engineering...")
         raw_features = ['temperature', 'humidity', 'pressure', 'wind_speed', 'wind_direction',
-                       'carbon_monoxide', 'nitrogen_dioxide', 'ozone', 'sulphur_dioxide', 
+                       'carbon_monoxide', 'no', 'nitrogen_dioxide', 'ozone', 'sulphur_dioxide', 
                        'pm2_5', 'pm10', 'nh3', 'openweather_aqi', 'pm2_5_aqi', 'pm10_aqi', 'us_aqi',
                        'city', 'latitude', 'longitude']
         
