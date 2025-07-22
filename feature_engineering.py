@@ -169,11 +169,19 @@ class AQIFeatureEngineer:
         # Ensure data is sorted by timestamp first
         df = df.sort_index()
         
+        # Debug: Log some info about the dataset being processed
+        logger.info(f"DEBUG: Creating lag features for dataset with {len(df)} records")
+        logger.info(f"DEBUG: Date range: {df.index.min()} to {df.index.max()}")
+        logger.info(f"DEBUG: Sample timestamps: {list(df.index[:5])}")
+        logger.info(f"DEBUG: Target columns: {self.target_columns}")
+        
         # Create lag features for both target variables (PM2.5 and PM10)
         for target in self.target_columns:
             if target in df.columns:
+                logger.info(f"DEBUG: Creating lag features for {target}")
                 # Create time-based lag features for target variable
                 for lag in self.lag_hours:
+                    logger.info(f"DEBUG: Creating {lag}h lag for {target}")
                     df[f'{target}_lag_{lag}h'] = self._create_time_based_lag(df, target, lag)
                 
                 # Create time-based rolling statistics
@@ -222,6 +230,11 @@ class AQIFeatureEngineer:
         lag_series = pd.Series(index=df.index, dtype=float)
         tolerance = self._get_tolerance(lag_hours, 'lag')
         
+        # Debug: Log the chronologically latest few calculations to see what's happening
+        # Since df is sorted by timestamp, the last few records are the most recent
+        total_records = len(df.index)
+        debug_start = max(0, total_records - 5)  # Last 5 records (most recent timestamps)
+        
         for i, current_time in enumerate(df.index):
             target_time = current_time - timedelta(hours=lag_hours)
             
@@ -233,6 +246,21 @@ class AQIFeatureEngineer:
             mask = (df.index >= acceptable_range_start) & (df.index <= acceptable_range_end)
             matching_data = df[mask][target]
             
+            # Debug logging for latest few records
+            if i >= debug_start:
+                logger.info(f"DEBUG LAG {lag_hours}h - Record {i}:")
+                logger.info(f"  Current time: {current_time}")
+                logger.info(f"  Target time: {target_time}")
+                logger.info(f"  Tolerance: ±{tolerance}")
+                logger.info(f"  Acceptable range: {acceptable_range_start} to {acceptable_range_end}")
+                logger.info(f"  Found {len(matching_data)} matching data points")
+                if len(matching_data) > 0:
+                    logger.info(f"  Matching timestamps: {list(df.index[mask])}")
+                    logger.info(f"  Matching values: {list(matching_data.values)}")
+                else:
+                    logger.info(f"  No matching data found")
+                debug_count += 1
+            
             if len(matching_data) > 0:
                 # Use the closest data point to target_time
                 matching_indices = df.index[mask]
@@ -243,8 +271,17 @@ class AQIFeatureEngineer:
                 # Handle potential duplicate timestamps by ensuring scalar value
                 value = df.loc[closest_idx, target]
                 lag_series.iloc[i] = value if np.isscalar(value) else value.iloc[0]
+                
+                if i >= debug_start:
+                    logger.info(f"  Selected closest: {closest_idx} (diff: {time_diffs[min_diff_idx]:.0f}s)")
+                    logger.info(f"  Final lag value: {lag_series.iloc[i]}")
             else:
                 lag_series.iloc[i] = np.nan
+                if i >= debug_start:
+                    logger.info(f"  Result: NaN (no data found)")
+            
+            if i >= debug_start:
+                logger.info("")
         
         return lag_series
     
