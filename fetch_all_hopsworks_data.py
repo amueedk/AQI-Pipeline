@@ -82,6 +82,7 @@ def fetch_all_hopsworks_data():
         # Show basic info
         logger.info(f"✓ Columns: {list(df.columns)}")
         logger.info(f"✓ Date range: {df.index.min()} to {df.index.max()}")
+        print(df['time_str'].head())
         
     except Exception as e:
         logger.error(f"Failed to read data from feature group: {e}")
@@ -117,6 +118,8 @@ def fetch_all_hopsworks_data():
             
             f.write("=== LAST 10 ROWS ===\n")
             f.write(str(df.tail(10)) + "\n")
+            
+
         
         logger.info(f"✓ Summary saved to: {summary_filename}")
         
