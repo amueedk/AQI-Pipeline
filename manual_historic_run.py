@@ -405,7 +405,6 @@ def run_manual_backfill_csv_and_hopsworks():
     
     # For historical backfill, we need both offline and online storage
     # Create a temporary uploader with both storages enabled
-    from hopsworks_integration import HopsworksUploader
     
     # Override the push_features method for both offline and online storage
     def push_features_both_storages(self, df, group_name, description):
