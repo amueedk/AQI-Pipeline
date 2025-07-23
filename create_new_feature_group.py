@@ -74,8 +74,11 @@ def create_new_feature_group():
         if 'time' in df.columns:
             df['time'] = pd.to_datetime(df['time'])
         
+        # Round time to nearest hour for primary key (e.g., 22/07/2025 9:00:45 PM -> 22/07/2025 9:00:00 PM)
+        df['time_rounded'] = df['time'].dt.floor('H')
+        
         # Add time_str column as primary key (required for HUDI format)
-        df['time_str'] = df['time'].dt.strftime('%Y-%m-%d %H:%M:%S')
+        df['time_str'] = df['time_rounded'].dt.strftime('%Y-%m-%d %H:%M:%S')
         
         # Create feature group using the same pattern as hopsworks_integration.py
         fg = uploader.fs.get_or_create_feature_group(
@@ -84,7 +87,7 @@ def create_new_feature_group():
             description="Multan AQI features with FIXED lag/rolling features (correctly calculated) - temporary name",
             primary_key=['time_str'],
             event_time='time',
-            online_enabled=False,  # Disable online features to avoid Kafka dependency
+            online_enabled=True,  # Enable online storage for real-time app predictions
         )
         
         logger.info("✅ Feature group created successfully")

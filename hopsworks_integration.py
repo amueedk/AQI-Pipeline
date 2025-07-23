@@ -101,8 +101,11 @@ class HopsworksUploader:
         # Ensure event_time column is correct format
         df_to_insert['time'] = pd.to_datetime(df_to_insert['time'])
         
+        # Round time to nearest hour for primary key (e.g., 22/07/2025 9:00:45 PM -> 22/07/2025 9:00:00 PM)
+        df_to_insert['time_rounded'] = df_to_insert['time'].dt.floor('H')
+        
         # Primary key must be unique and is required for online feature store
-        df_to_insert['time_str'] = df_to_insert['time'].dt.strftime('%Y-%m-%d %H:%M:%S')
+        df_to_insert['time_str'] = df_to_insert['time_rounded'].dt.strftime('%Y-%m-%d %H:%M:%S')
 
         try:
             # Get or create the feature group
@@ -112,7 +115,7 @@ class HopsworksUploader:
                 description=description,
                 primary_key=['time_str'],
                 event_time='time',
-                online_enabled=False  # Always offline, no Kafka required
+                online_enabled=True  # Enable online storage for real-time app predictions
             )
 
             logger.info(f"Inserting {len(df_to_insert)} rows into feature group '{group_name}'...")
