@@ -214,15 +214,15 @@ def fetch_historic_pollution_batch(start_unix, end_unix, max_records_per_call=24
 
 def collect_historical_data_june_to_july_2025():
     """
-    Collect historical data for June 16, 2025 to July 22, 2025 with timestamp matching.
+    Collect historical data for June 16, 2025 to July 23, 2025 with timestamp matching.
     Uses multiple API calls to work around record limits.
     Returns DataFrame with matched weather and pollution data.
     """
-    logger.info("Collecting historical data for June 16, 2025 to July 22, 2025...")
+    logger.info("Collecting historical data for June 16, 2025 to July 23, 2025...")
     
-    # Define date range: June 16, 2025 00:00 UTC to July 22, 2025 23:59 UTC
+    # Define date range: June 16, 2025 00:00 UTC to July 23, 2025 23:59 UTC
     start_date = datetime(2025, 6, 16, 0, 0, 0, tzinfo=None)  # June 16, 2025 00:00
-    end_date = datetime(2025, 7, 22, 23, 59, 59, tzinfo=None)  # July 22, 2025 23:59
+    end_date = datetime(2025, 7, 23, 23, 59, 59, tzinfo=None)  # July 23, 2025 23:59
     
     # Convert to Unix timestamps
     start_unix = int(start_date.timestamp())
@@ -318,7 +318,7 @@ def run_manual_backfill_csv_and_hopsworks():
         return False
 
     # 2. Collect Historical Data
-    logger.info("STEP 2: Collecting historical data for June 16, 2025 to July 22, 2025...")
+    logger.info("STEP 2: Collecting historical data for June 16, 2025 to July 23, 2025...")
     raw_df = collect_historical_data_june_to_july_2025()
     if raw_df.empty:
         logger.error("Data collection failed. No data to process. Aborting.")
@@ -326,7 +326,7 @@ def run_manual_backfill_csv_and_hopsworks():
     logger.info(f"Successfully collected {len(raw_df)} records.")
 
     # Save raw data as CSV for reference
-    raw_data_path = "data/raw_historical_data_june16_july22_2025.csv"
+    raw_data_path = "data/raw_historical_data_june16_july23_2025.csv"
     os.makedirs("data", exist_ok=True)
     raw_df.to_csv(raw_data_path, index=False)
     logger.info(f"Raw data saved to {raw_data_path}")
@@ -360,7 +360,7 @@ def run_manual_backfill_csv_and_hopsworks():
 
     # 4. Save to CSV
     logger.info("\nSTEP 4: Saving engineered features to CSV...")
-    engineered_data_path = "data/engineered_features_june16_july22_2025.csv"
+    engineered_data_path = "data/engineered_features_june16_july23_2025.csv"
     engineered_df.to_csv(engineered_data_path, index=False)
     
     logger.info(f"Engineered features saved to {engineered_data_path}")
@@ -385,7 +385,7 @@ def run_manual_backfill_csv_and_hopsworks():
         logger.info("✓ Added CSV files to git staging")
         
         # Commit with descriptive message
-        commit_message = f"Add historical data for June 16-July 22, 2025 ({len(engineered_df)} records)"
+        commit_message = f"Add historical data for June 16-July 23, 2025 ({len(engineered_df)} records)"
         subprocess.run(["git", "commit", "-m", commit_message], check=True)
         logger.info(f"✓ Committed CSV files: {commit_message}")
         
@@ -403,11 +403,71 @@ def run_manual_backfill_csv_and_hopsworks():
     # 6. Push to Hopsworks (EXACT same logic as automated_hourly_run.py)
     logger.info("\nSTEP 6: Pushing features to Hopsworks...")
     
-    success = uploader.push_features(
-        df=engineered_df,
-        group_name=HOPSWORKS_CONFIG['feature_group_name'],
-        description="Historical backfill of PM2.5 and PM10 prediction features for Multan (June 16-July 22, 2025). Targets: pm2_5, pm10 (raw concentrations), Reference: us_aqi (final AQI)."
-    )
+    # For historical backfill, we need both offline and online storage
+    # Create a temporary uploader with both storages enabled
+    from hopsworks_integration import HopsworksUploader
+    
+    # Override the push_features method for both offline and online storage
+    def push_features_both_storages(self, df, group_name, description):
+        """Push features to both offline and online storage (for historical backfill)"""
+        if self.fs is None:
+            logger.error("Not connected to Hopsworks. Please call connect() first.")
+            return False
+            
+        if df.empty:
+            logger.warning("Input DataFrame is empty. Nothing to push to Hopsworks.")
+            return True
+
+        # Prepare the DataFrame for Hopsworks
+        df_to_insert = df.copy()
+        if 'time' not in df_to_insert.columns:
+             if isinstance(df_to_insert.index, pd.DatetimeIndex):
+                 df_to_insert.reset_index(inplace=True)
+             else:
+                 logger.error("DataFrame must have a 'time' column or a DatetimeIndex.")
+                 return False
+
+        # Ensure event_time column is correct format
+        df_to_insert['time'] = pd.to_datetime(df_to_insert['time'])
+        
+        # Round time to nearest hour for primary key (e.g., 22/07/2025 9:00:45 PM -> 22/07/2025 9:00:00 PM)
+        df_to_insert['time_rounded'] = df_to_insert['time'].dt.floor('H')
+        
+        # Primary key must be unique and is required for online feature store
+        df_to_insert['time_str'] = df_to_insert['time_rounded'].dt.strftime('%Y-%m-%d %H:%M:%S')
+
+        try:
+            # Get or create the feature group with BOTH offline and online storage
+            fg = self.fs.get_or_create_feature_group(
+                name=group_name,
+                version=1,
+                description=description,
+                primary_key=['time_str'],
+                event_time='time',
+                online_enabled=True  # Enable both offline and online storage
+            )
+
+            logger.info(f"Inserting {len(df_to_insert)} rows into feature group '{group_name}' (offline + online)...")
+            fg.insert(df_to_insert, write_options={"wait_for_job": True})
+            logger.info("Successfully inserted data into Hopsworks (offline + online storage).")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to insert data into Hopsworks: {e}")
+            return False
+    
+    # Temporarily replace the push_features method
+    original_push_features = uploader.push_features
+    uploader.push_features = push_features_both_storages.__get__(uploader, HopsworksUploader)
+    
+    try:
+        success = uploader.push_features(
+            df=engineered_df,
+            group_name=HOPSWORKS_CONFIG['feature_group_name'],
+            description="Historical backfill of PM2.5 and PM10 prediction features for Multan (June 16-July 23, 2025). Targets: pm2_5, pm10 (raw concentrations), Reference: us_aqi (final AQI)."
+        )
+    finally:
+        # Restore original method
+        uploader.push_features = original_push_features
     
     if not success:
         logger.error("Failed to push features to Hopsworks.")

@@ -87,7 +87,7 @@ def create_new_feature_group():
             description="Multan AQI features with FIXED lag/rolling features (correctly calculated) - temporary name",
             primary_key=['time_str'],
             event_time='time',
-            online_enabled=True,  # Enable online storage for real-time app predictions
+            online_enabled=False  # OFFLINE ONLY for historical data creation
         )
         
         logger.info("✅ Feature group created successfully")
