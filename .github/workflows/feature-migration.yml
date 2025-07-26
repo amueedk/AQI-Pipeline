@@ -30,12 +30,12 @@ jobs:
     - name: Create logs directory
       run: mkdir -p logs
       
-    - name: Run Feature Migration
-      env:
-        HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
-        OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
-        IQAIR_API_KEY: ${{ secrets.IQAIR_API_KEY }}
-             run: |
+         - name: Run Feature Migration
+       env:
+         HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
+         OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
+         IQAIR_API_KEY: ${{ secrets.IQAIR_API_KEY }}
+       run: |
          echo "🚀 Starting feature migration..."
          python feature_migration.py
          
