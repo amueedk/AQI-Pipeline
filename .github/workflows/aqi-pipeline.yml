@@ -8,7 +8,7 @@ on:
 jobs:
   hourly-update:
     runs-on: ubuntu-latest
-    timeout-minutes: 10  # Add timeout
+    timeout-minutes: 15  # Increased timeout for dual feature group operations
     permissions:
       contents: write
     steps:
@@ -31,9 +31,9 @@ jobs:
           mkdir -p logs
           mkdir -p data
 
-      - name: Run automated hourly update script
+      - name: Run automated hourly update script (Dual Feature Groups)
         run: |
-          python automated_hourly_run.py
+          python automated_hourly_run_updated.py
         env:
           HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
           OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
