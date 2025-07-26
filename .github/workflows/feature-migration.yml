@@ -2,58 +2,32 @@ name: Feature Migration - Create Clean Feature Group
 
 on:
   workflow_dispatch:
-    inputs:
-      run_migration:
-        description: 'Run feature migration'
-        required: true
-        default: 'true'
-        type: boolean
+    # Allows manual triggering from the GitHub UI for feature migration
 
 jobs:
   migrate-features:
     runs-on: ubuntu-latest
     
     steps:
-    - name: Checkout code
+    - name: Checkout repository code
       uses: actions/checkout@v4
-      
-    - name: Set up Python
+
+    - name: Set up Python 3.12
       uses: actions/setup-python@v4
       with:
         python-version: '3.12'
-        
-    - name: Install dependencies
+        cache: 'pip'
+
+    - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pandas numpy hopsworks[python] python-dotenv requests
-        
-    - name: Run Feature Migration
+        pip install -r requirements.txt
+        pip install hopsworks[python]
+
+    - name: Run feature migration script
+      run: |
+        python feature_migration.py
       env:
         HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
         OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
-        IQAIR_API_KEY: ${{ secrets.IQAIR_API_KEY }}
-      run: |
-        echo "🚀 Starting feature migration..."
-        echo "🔍 Checking environment variables..."
-        echo "HOPSWORKS_API_KEY set: $([ -n "$HOPSWORKS_API_KEY" ] && echo "YES" || echo "NO")"
-        echo "OPENWEATHER_API_KEY set: $([ -n "$OPENWEATHER_API_KEY" ] && echo "YES" || echo "NO")"
-        echo "IQAIR_API_KEY set: $([ -n "$IQAIR_API_KEY" ] && echo "YES" || echo "NO")"
-        echo "🔍 Python version: $(python --version)"
-        echo "🔍 Current directory: $(pwd)"
-        echo "🔍 Files in directory: $(ls -la)"
-        python feature_migration.py
-        
-    - name: Check migration success
-      run: |
-        echo "🔍 Checking for migration success file..."
-        if [ -f "migration_success.txt" ]; then
-          echo "✅ Migration completed successfully!"
-          cat migration_success.txt
-        else
-          echo "❌ Migration failed or did not complete"
-          echo "🔍 Checking for any error files..."
-          ls -la *.log *.txt 2>/dev/null || echo "No log files found"
-          echo "🔍 Checking Python error output..."
-          python -c "import sys; print('Python path:', sys.path)" 2>&1 || echo "Python check failed"
-          exit 1
-        fi 
+        IQAIR_API_KEY: ${{ secrets.IQAIR_API_KEY }} 
