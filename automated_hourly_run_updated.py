@@ -225,22 +225,26 @@ class AQIDataCollector:
             print("❌ Feature engineering failed")
             return None
         
-        # Add wind direction engineering (not in feature_engineering.py)
+        # Add wind direction engineering (not in feature_engineering.py) - only if not already present
         if 'wind_direction' in combined_raw_df.columns:
-            wind_dir = combined_raw_df['wind_direction']
-            engineered_df['wind_direction_sin'] = np.sin(np.radians(wind_dir))
-            engineered_df['wind_direction_cos'] = np.cos(np.radians(wind_dir))
-            
-            # Pollution source indicators
-            engineered_df['is_wind_from_high_pm'] = (
-                (engineered_df['wind_direction_sin'] > 0.5) |
-                (engineered_df['wind_direction_sin'] > 0.3) & (engineered_df['wind_direction_cos'] > 0.3)
-            ).astype(int)
-            
-            engineered_df['is_wind_from_low_pm'] = (
-                (engineered_df['wind_direction_sin'] < -0.5) |
-                (engineered_df['wind_direction_cos'] < -0.5)
-            ).astype(int)
+            if 'wind_direction_sin' not in engineered_df.columns:
+                wind_dir = combined_raw_df['wind_direction']
+                engineered_df['wind_direction_sin'] = np.sin(np.radians(wind_dir))
+                engineered_df['wind_direction_cos'] = np.cos(np.radians(wind_dir))
+                
+                # Pollution source indicators
+                engineered_df['is_wind_from_high_pm'] = (
+                    (engineered_df['wind_direction_sin'] > 0.5) |
+                    (engineered_df['wind_direction_sin'] > 0.3) & (engineered_df['wind_direction_cos'] > 0.3)
+                ).astype(int)
+                
+                engineered_df['is_wind_from_low_pm'] = (
+                    (engineered_df['wind_direction_sin'] < -0.5) |
+                    (engineered_df['wind_direction_cos'] < -0.5)
+                ).astype(int)
+                print("✅ Added wind direction engineering features")
+            else:
+                print("✅ Wind direction features already present in existing data - preserving them")
         
         # Add pollutant lags (not in feature_engineering.py)
         # Handle both column name formats
@@ -252,13 +256,17 @@ class AQIDataCollector:
         engineered_df['o3_lag_1h'] = combined_raw_df[o3_col].shift(1)
         engineered_df['so2_lag_1h'] = combined_raw_df[so2_col].shift(1)
         
-        # Add new interactions (not in feature_engineering.py)
-        engineered_df['wind_direction_temp_interaction'] = engineered_df['wind_direction_sin'] * combined_raw_df['temperature']
-        engineered_df['wind_direction_humidity_interaction'] = engineered_df['wind_direction_sin'] * combined_raw_df['humidity']
-        engineered_df['pressure_humidity_interaction'] = combined_raw_df['pressure'] * combined_raw_df['humidity']
-        engineered_df['co_pressure_interaction'] = combined_raw_df[co_col] * combined_raw_df['pressure']
-        engineered_df['o3_temp_interaction'] = combined_raw_df[o3_col] * combined_raw_df['temperature']
-        engineered_df['so2_humidity_interaction'] = combined_raw_df[so2_col] * combined_raw_df['humidity']
+        # Add new interactions (not in feature_engineering.py) - only if not already present
+        if 'wind_direction_temp_interaction' not in engineered_df.columns:
+            engineered_df['wind_direction_temp_interaction'] = engineered_df['wind_direction_sin'] * combined_raw_df['temperature']
+            engineered_df['wind_direction_humidity_interaction'] = engineered_df['wind_direction_sin'] * combined_raw_df['humidity']
+            engineered_df['pressure_humidity_interaction'] = combined_raw_df['pressure'] * combined_raw_df['humidity']
+            engineered_df['co_pressure_interaction'] = combined_raw_df[co_col] * combined_raw_df['pressure']
+            engineered_df['o3_temp_interaction'] = combined_raw_df[o3_col] * combined_raw_df['temperature']
+            engineered_df['so2_humidity_interaction'] = combined_raw_df[so2_col] * combined_raw_df['humidity']
+            print("✅ Added new interaction features")
+        else:
+            print("✅ New interaction features already present in existing data - preserving them")
         
         # Select only the 58 clean features we want
         clean_features = [
