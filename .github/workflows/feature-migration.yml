@@ -34,14 +34,26 @@ jobs:
         IQAIR_API_KEY: ${{ secrets.IQAIR_API_KEY }}
       run: |
         echo "🚀 Starting feature migration..."
+        echo "🔍 Checking environment variables..."
+        echo "HOPSWORKS_API_KEY set: $([ -n "$HOPSWORKS_API_KEY" ] && echo "YES" || echo "NO")"
+        echo "OPENWEATHER_API_KEY set: $([ -n "$OPENWEATHER_API_KEY" ] && echo "YES" || echo "NO")"
+        echo "IQAIR_API_KEY set: $([ -n "$IQAIR_API_KEY" ] && echo "YES" || echo "NO")"
+        echo "🔍 Python version: $(python --version)"
+        echo "🔍 Current directory: $(pwd)"
+        echo "🔍 Files in directory: $(ls -la)"
         python feature_migration.py
         
     - name: Check migration success
       run: |
+        echo "🔍 Checking for migration success file..."
         if [ -f "migration_success.txt" ]; then
           echo "✅ Migration completed successfully!"
           cat migration_success.txt
         else
           echo "❌ Migration failed or did not complete"
+          echo "🔍 Checking for any error files..."
+          ls -la *.log *.txt 2>/dev/null || echo "No log files found"
+          echo "🔍 Checking Python error output..."
+          python -c "import sys; print('Python path:', sys.path)" 2>&1 || echo "Python check failed"
           exit 1
         fi 
