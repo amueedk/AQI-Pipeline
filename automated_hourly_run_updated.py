@@ -268,7 +268,7 @@ class AQIDataCollector:
         else:
             print("✅ New interaction features already present in existing data - preserving them")
         
-        # Select only the 58 clean features we want
+        # Select only the 59 clean features we want (including raw wind_direction)
         clean_features = [
             # Time columns
             'time', 'time_str',
@@ -279,8 +279,8 @@ class AQIDataCollector:
             # AQI
             'us_aqi',
             
-            # Weather
-            'temperature', 'humidity', 'pressure', 'wind_speed',
+            # Weather (including raw wind_direction)
+            'temperature', 'humidity', 'pressure', 'wind_speed', 'wind_direction',
             
             # Wind direction engineering
             'wind_direction_sin', 'wind_direction_cos', 'is_wind_from_high_pm', 'is_wind_from_low_pm',

@@ -103,7 +103,7 @@ class HopsworksFeatureMigration:
         # Now select only the 58 clean features we want
         print("🔍 Selecting 58 clean features from engineered data...")
         
-        # Define the 58 clean features we want
+        # Define the 59 clean features we want (including raw wind_direction)
         clean_features = [
             # Time columns (required for Hopsworks)
             'time', 'time_str',
@@ -114,8 +114,8 @@ class HopsworksFeatureMigration:
             # 2. AQI (1 feature)
             'us_aqi',
             
-            # 3. CURRENT WEATHER (4 features)
-            'temperature', 'humidity', 'pressure', 'wind_speed',
+            # 3. CURRENT WEATHER (5 features - including raw wind_direction)
+            'temperature', 'humidity', 'pressure', 'wind_speed', 'wind_direction',
             
             # 4. WIND DIRECTION ENGINEERING (4 features) - NEW
             'wind_direction_sin', 'wind_direction_cos', 'is_wind_from_high_pm', 'is_wind_from_low_pm',
@@ -265,7 +265,7 @@ class HopsworksFeatureMigration:
         print(f"   Infinite values: {np.isinf(clean_data.select_dtypes(include=[np.number])).sum().sum()}")
         
         # Check feature counts
-        expected_features = 58  # Based on our plan
+        expected_features = 59  # Based on our plan (including raw wind_direction)
         actual_features = len(clean_data.columns)
         print(f"📊 Feature count: {actual_features} (expected: {expected_features})")
         
