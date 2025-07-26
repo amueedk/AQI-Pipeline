@@ -47,9 +47,10 @@ class HopsworksFeatureMigration:
                 version=1,
                 description="Clean, optimized features for AQI prediction (58 features based on EDA)",
                 primary_key=["time_str"],  # Fixed: primary_key (singular), not primary_keys
-                event_time="time"  # Consistent with existing: time as event time
+                event_time="time",  # Consistent with existing: time as event time
+                online_enabled=True  # Enable both offline and online storage (like manual_historic_run.py)
             )
-            print("✅ Created new feature group: aqi_clean_features_v2")
+            print("✅ Created new feature group: aqi_clean_features_v2 (offline + online)")
             return fg
         except Exception as e:
             print(f"❌ Error creating feature group: {e}")
@@ -226,9 +227,11 @@ class HopsworksFeatureMigration:
         
         # 4. Store in new feature group
         try:
-            new_fg.insert(clean_data)
+            new_fg.insert(clean_data, write_options={"wait_for_job": True})
             print(f"✅ Successfully migrated {len(clean_data)} rows to new feature group")
             print(f"📊 Old features: {len(old_data.columns)} → New features: {len(clean_data.columns)}")
+            print("✅ Feature group is online-enabled and data is committed!")
+            
             return clean_data
         except Exception as e:
             print(f"❌ Error storing data: {e}")
