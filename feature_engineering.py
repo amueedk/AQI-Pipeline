@@ -536,7 +536,7 @@ class AQIFeatureEngineer:
         
         # Ensure index is datetime
         if not isinstance(df.index, pd.DatetimeIndex):
-            df.index = pd.to_datetime(df.index)
+            df.index = pd.to_datetime(df.index, utc=True)
 
         # --- AQIs ARE ALREADY CALCULATED IN DATA COLLECTOR ---
         # The data collector already calculates pm2_5_aqi, pm10_aqi, and us_aqi
