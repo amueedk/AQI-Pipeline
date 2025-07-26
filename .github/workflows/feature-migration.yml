@@ -1,0 +1,57 @@
+name: Feature Migration - Create Clean Feature Group
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_migration:
+        description: 'Run feature migration'
+        required: true
+        default: 'true'
+        type: boolean
+
+jobs:
+  migrate-features:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pandas numpy hopsworks python-dotenv requests
+        
+    - name: Create logs directory
+      run: mkdir -p logs
+      
+    - name: Run Feature Migration
+      env:
+        HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
+        OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
+        IQAIR_API_KEY: ${{ secrets.IQAIR_API_KEY }}
+      run: |
+        echo "🚀 Starting feature migration..."
+        python feature_migration.py
+        
+    - name: Upload logs
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: migration-logs
+        path: logs/
+        
+    - name: Check migration success
+      run: |
+        if [ -f "migration_success.txt" ]; then
+          echo "✅ Migration completed successfully!"
+          cat migration_success.txt
+        else
+          echo "❌ Migration failed or did not complete"
+          exit 1
+        fi 

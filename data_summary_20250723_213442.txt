@@ -1,7 +1,7 @@
 === HOPSWORKS DATA SUMMARY ===
 
-Total Records: 892
-Date Range: 0 to 891
+Total Records: 905
+Date Range: 0 to 904
 Columns: 127
 Column Names: ['temperature', 'humidity', 'pressure', 'wind_speed', 'wind_direction', 'carbon_monoxide', 'no', 'nitrogen_dioxide', 'ozone', 'sulphur_dioxide', 'pm2_5', 'pm10', 'nh3', 'openweather_aqi', 'pm2_5_aqi', 'pm10_aqi', 'us_aqi', 'hour_sin', 'hour_cos', 'day_sin', 'day_cos', 'month_sin', 'month_cos', 'day_of_week_sin', 'day_of_week_cos', 'is_spring', 'is_summer', 'is_autumn', 'is_winter', 'is_night', 'is_morning_rush', 'is_evening_rush', 'pm2_5_lag_1h', 'pm2_5_lag_2h', 'pm2_5_lag_3h', 'pm2_5_lag_6h', 'pm2_5_lag_12h', 'pm2_5_lag_24h', 'pm2_5_lag_48h', 'pm2_5_lag_72h', 'pm2_5_rolling_mean_3h', 'pm2_5_rolling_std_3h', 'pm2_5_rolling_min_3h', 'pm2_5_rolling_max_3h', 'pm2_5_rolling_mean_6h', 'pm2_5_rolling_std_6h', 'pm2_5_rolling_min_6h', 'pm2_5_rolling_max_6h', 'pm2_5_rolling_mean_12h', 'pm2_5_rolling_std_12h', 'pm2_5_rolling_min_12h', 'pm2_5_rolling_max_12h', 'pm2_5_rolling_mean_24h', 'pm2_5_rolling_std_24h', 'pm2_5_rolling_min_24h', 'pm2_5_rolling_max_24h', 'pm2_5_change_rate_1h', 'pm2_5_change_rate_6h', 'pm2_5_change_rate_24h', 'pm10_lag_1h', 'pm10_lag_2h', 'pm10_lag_3h', 'pm10_lag_6h', 'pm10_lag_12h', 'pm10_lag_24h', 'pm10_lag_48h', 'pm10_lag_72h', 'pm10_rolling_mean_3h', 'pm10_rolling_std_3h', 'pm10_rolling_min_3h', 'pm10_rolling_max_3h', 'pm10_rolling_mean_6h', 'pm10_rolling_std_6h', 'pm10_rolling_min_6h', 'pm10_rolling_max_6h', 'pm10_rolling_mean_12h', 'pm10_rolling_std_12h', 'pm10_rolling_min_12h', 'pm10_rolling_max_12h', 'pm10_rolling_mean_24h', 'pm10_rolling_std_24h', 'pm10_rolling_min_24h', 'pm10_rolling_max_24h', 'pm10_change_rate_1h', 'pm10_change_rate_6h', 'pm10_change_rate_24h', 'temp_squared', 'temp_cubed', 'temp_change_rate', 'is_hot', 'is_cold', 'humidity_squared', 'is_high_humidity', 'is_low_humidity', 'wind_speed_squared', 'is_high_wind', 'is_calm', 'pressure_change_rate', 'is_low_pressure', 'is_high_pressure', 'pm2_5_squared', 'pm2_5_change_rate', 'is_high_pm2_5', 'is_low_pm2_5', 'pm10_squared', 'pm10_change_rate', 'is_high_pm10', 'is_low_pm10', 'no2_squared', 'no2_change_rate', 'is_high_no2', 'o3_squared', 'o3_change_rate', 'is_high_o3', 'co_squared', 'co_change_rate', 'is_high_co', 'so2_squared', 'so2_change_rate', 'is_high_so2', 'temp_humidity_interaction', 'temp_wind_interaction', 'pm2_5_temp_interaction', 'pm2_5_humidity_interaction', 'wind_pm2_5_interaction', 'time', 'time_str']
 
@@ -21,13 +21,13 @@ Length: 127, dtype: object
 
 === BASIC STATISTICS ===
        temperature    humidity     pressure  wind_speed  ...  temp_wind_interaction  pm2_5_temp_interaction  pm2_5_humidity_interaction  wind_pm2_5_interaction
-count   892.000000  892.000000   892.000000  892.000000  ...             892.000000              892.000000                  892.000000              892.000000
-mean     34.575617   57.459641   995.535874    3.472096  ...             122.200895             1281.018985                 2127.233868              119.834021
-std       3.849193   13.691795     2.874059    2.278668  ...              83.416778              528.347846                 1014.172314               91.558660
+count   905.000000  905.000000   905.000000  905.000000  ...             905.000000              905.000000                  905.000000              905.000000
+mean     34.566243   57.605525   995.475138    3.484762  ...             122.577589             1276.095829                 2123.779901              119.858678
+std       3.832455   13.660395     2.907438    2.268334  ...              83.013700              526.267834                 1008.028485               91.010553
 min      24.940000   25.000000   988.000000    0.000000  ...               0.000000                0.000000                    0.000000                0.000000
-25%      31.940000   47.000000   993.000000    2.060000  ...              74.036400              874.538575                 1402.775000               69.787650
-50%      34.940000   56.000000   995.000000    3.090000  ...             111.054600             1214.138900                 1915.180000              108.736600
-75%      36.940000   66.000000   998.000000    4.120000  ...             159.031600             1607.246000                 2624.427500              156.736575
+25%      31.940000   47.000000   993.000000    2.060000  ...              74.036400              871.729300                 1405.600000               69.895800
+50%      34.940000   56.000000   995.000000    3.090000  ...             111.054600             1205.274600                 1915.180000              108.828800
+75%      36.940000   66.000000   998.000000    4.120000  ...             159.031600             1601.999000                 2606.030000              156.616900
 max      44.510000   94.000000  1002.000000   17.490000  ...             681.060600             3112.254600                 5968.530000              827.855700
 
 [8 rows x 125 columns]
@@ -49,15 +49,15 @@ max      44.510000   94.000000  1002.000000   17.490000  ...             681.060
 
 === LAST 10 ROWS ===
      temperature  humidity  pressure  wind_speed  ...  pm2_5_humidity_interaction  wind_pm2_5_interaction                      time             time_str
-882        41.94      31.0     991.0        3.09  ...                     1733.21                172.7619 2025-06-19 13:00:00+00:00  2025-06-19 13:00:00
-883        29.94      70.0     995.0        4.12  ...                     1353.80                 79.6808 2025-07-07 20:00:00+00:00  2025-07-07 20:00:00
-884        30.40      61.0    1000.0        5.45  ...                     2659.60                237.6200 2025-07-15 06:00:00+00:00  2025-07-15 06:00:00
-885        31.94      70.0     999.0        3.09  ...                     2058.00                 90.8460 2025-07-18 16:00:00+00:00  2025-07-18 16:00:00
-886        39.94      37.0     994.0        3.09  ...                     2242.20                187.2540 2025-06-19 07:00:00+00:00  2025-06-19 07:00:00
-887        29.94      79.0    1000.0        3.09  ...                        0.00                  0.0000 2025-06-27 03:00:00+00:00  2025-06-27 03:00:00
-888        33.94      59.0     993.0        7.20  ...                     1948.77                237.8160 2025-06-21 23:00:00+00:00  2025-06-21 23:00:00
-889        37.94      50.0     990.0        3.09  ...                     1506.50                 93.1017 2025-06-24 17:00:00+00:00  2025-06-24 17:00:00
-890        32.94      66.0     998.0        2.06  ...                     2861.10                 89.3010 2025-07-12 15:00:00+00:00  2025-07-12 15:00:00
-891        31.00      74.0     995.0        3.09  ...                     2242.94                 93.6579 2025-07-23 03:00:45+00:00  2025-07-23 03:00:00
+895         33.0      70.0     993.0        5.14  ...                     2319.10                170.2882 2025-07-23 07:00:44+00:00  2025-07-23 07:00:00
+896         34.0      66.0     992.0        6.17  ...                     2119.26                198.1187 2025-07-23 08:00:40+00:00  2025-07-23 08:00:00
+897         35.0      66.0     991.0        6.17  ...                     2004.42                187.3829 2025-07-23 09:00:47+00:00  2025-07-23 09:00:00
+898         36.0      63.0     990.0        4.12  ...                     1760.85                115.1540 2025-07-23 10:00:45+00:00  2025-07-23 10:00:00
+899         37.0      59.0     990.0        3.09  ...                     1507.45                 78.9495 2025-07-23 11:00:42+00:00  2025-07-23 11:00:00
+900         37.0      59.0     989.0        4.12  ...                     1409.51                 98.4268 2025-07-23 12:00:40+00:00  2025-07-23 12:00:00
+901         36.0      71.0     989.0        5.14  ...                     1622.35                117.4490 2025-07-23 13:00:46+00:00  2025-07-23 13:00:00
+902         35.0      66.0     989.0        5.14  ...                     1473.78                114.7762 2025-07-23 14:00:47+00:00  2025-07-23 14:00:00
+903         34.0      66.0     990.0        4.12  ...                     1629.54                101.7228 2025-07-23 15:00:48+00:00  2025-07-23 15:00:00
+904         33.0      75.0     991.0        3.09  ...                     1866.00                 76.8792 2025-07-23 16:00:47+00:00  2025-07-23 16:00:00
 
 [10 rows x 127 columns]
