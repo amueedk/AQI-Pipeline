@@ -24,9 +24,24 @@ class AQIDataCollector:
         self.lat = 30.1575
         self.lon = 71.5249
         
-        # Connect to Hopsworks
-        self.connection = hopsworks.connection(api_key_value=self.hopsworks_api_key)
-        self.fs = self.connection.get_feature_store()
+        # Connect to Hopsworks (same as feature_migration.py)
+        self.project_name = 'AQIMultan'  # From config.py
+        
+        if not self.hopsworks_api_key:
+            print("❌ HOPSWORKS_API_KEY environment variable is not set!")
+            return
+            
+        try:
+            print(f"🔗 Connecting to Hopsworks project: {self.project_name}...")
+            self.project = hopsworks.login(
+                api_key_value=self.hopsworks_api_key,
+                project=self.project_name
+            )
+            self.fs = self.project.get_feature_store()
+            print("✅ Successfully connected to Hopsworks Feature Store.")
+        except Exception as e:
+            print(f"❌ Failed to connect to Hopsworks: {e}")
+            self.fs = None
         
     def collect_weather_data(self):
         """
@@ -454,6 +469,11 @@ def main():
     
     collector = AQIDataCollector()
     
+    # Check if connection was successful
+    if collector.fs is None:
+        print("❌ Failed to connect to Hopsworks. Cannot proceed.")
+        return False
+    
     # Run collection
     success = collector.run_collection()
     
@@ -466,6 +486,8 @@ def main():
         print("   4. Switch to new group only when validated")
     else:
         print("❌ Collection cycle failed!")
+    
+    return success
 
 if __name__ == "__main__":
     main() 
