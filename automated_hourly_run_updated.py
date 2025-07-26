@@ -232,6 +232,10 @@ class AQIDataCollector:
                 engineered_df['wind_direction_sin'] = np.sin(np.radians(wind_dir))
                 engineered_df['wind_direction_cos'] = np.cos(np.radians(wind_dir))
                 
+                # Fix floating-point precision issues (round tiny values to 0)
+                engineered_df['wind_direction_sin'] = engineered_df['wind_direction_sin'].round(10)
+                engineered_df['wind_direction_cos'] = engineered_df['wind_direction_cos'].round(10)
+                
                 # Pollution source indicators
                 engineered_df['is_wind_from_high_pm'] = (
                     (engineered_df['wind_direction_sin'] > 0.5) |
