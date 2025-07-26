@@ -371,6 +371,13 @@ class AQIDataCollector:
                 print("No 'time' column found and index is not datetime. Cannot proceed.")
                 return pd.DataFrame()
             
+            # Ensure timezone consistency - if timezone-naive, localize to UTC
+            if df.index.tz is None:
+                print("Converting timezone-naive timestamps to UTC...")
+                df.index = df.index.tz_localize('UTC')
+            else:
+                print("Timestamps are already timezone-aware")
+            
             # Remove any rows with invalid timestamps
             invalid_timestamps = df.index.isna()
             if invalid_timestamps.any():
@@ -412,6 +419,9 @@ class AQIDataCollector:
         new_df = pd.DataFrame([combined_data])
         new_df['timestamp'] = pd.to_datetime(new_df['timestamp'])
         new_df = new_df.set_index('timestamp')
+        
+        # Ensure timezone consistency - convert to UTC and make timezone-aware
+        new_df.index = new_df.index.tz_localize('UTC')
         
         # Add location metadata (same as original)
         new_df["city"] = "Multan"
