@@ -122,12 +122,25 @@
 
 #### **Section 12 - Interaction Features Analysis**
 - **5 Interaction Features**: temp_humidity, temp_wind, pm2_5_temp, pm2_5_humidity, wind_pm2_5
-- **Data Leakage Issues**: pm2_5_temp_interaction, pm2_5_humidity_interaction use PM2.5 (target)
+- **❌ INCORRECT ASSESSMENT**: pm2_5_temp_interaction, pm2_5_humidity_interaction were labeled as "data leakage"
 - **Performance Analysis**:
   - **4/10 interactions improve** over individual features (40%)
   - **Valuable interactions**: temp_humidity (+0.144), temp_wind (+0.011)
-  - **Problematic interactions**: PM2.5 interactions (data leakage)
-- **Engineering Recommendation**: **Keep 2, remove 3** interactions
+  - **❌ WRONG CONCLUSION**: PM2.5 interactions were incorrectly labeled as problematic
+- **Engineering Recommendation**: **❌ INCORRECT - Section 16 proves this wrong**
+
+#### **Section 16 - PM × Weather Interactions → Future PM Analysis (NEW)**
+- **CRITICAL DISCOVERY**: Current PM × weather interactions are **HIGHLY PREDICTIVE** for future PM
+- **Tested Approach**: Current PM × Current Weather → Future PM (1h, 6h, 12h, 24h, 48h, 72h)
+- **Key Findings**:
+  - **PM2.5 × Pressure**: 0.977 correlation at 1h, 0.647 at 24h - **🔥 STRONG**
+  - **PM2.5 × Temperature**: 0.926 correlation at 1h, 0.603 at 24h - **🔥 STRONG**
+  - **PM2.5 × Humidity**: 0.755 correlation at 1h, 0.665 at 12h - **🔥 STRONG**
+  - **PM10 × Pressure**: 0.809 correlation at 1h, 0.450 at 48h - **🔥 STRONG**
+  - **PM10 × Temperature**: 0.712 correlation at 1h, 0.344 at 72h - **🟡 MODERATE**
+  - **PM10 × Humidity**: 0.647 correlation at 1h, 0.320 at 72h - **🟡 MODERATE**
+- **Atmospheric Interpretation**: These interactions capture how current pollution levels under specific weather conditions predict future pollution evolution
+- **Engineering Recommendation**: **INCLUDE ALL 6 PM × WEATHER INTERACTIONS** - they're the most predictive features discovered
 
 #### **Section 13 - Binary Indicators Analysis**
 - **23 Binary Features**: Weather (7), Time (7), Pollution (9)
@@ -351,27 +364,33 @@ change_features = [
 ]
 ```
 
-### **7. Interaction Features (Based on Section 12)**
+### **7. Interaction Features (Based on Section 16 - CORRECTED)**
 ```python
-# KEEP ONLY 2 VALUABLE INTERACTIONS (40% improvement rate)
-useful_interactions = [
+# KEEP ALL 6 PM × WEATHER INTERACTIONS (Section 16 proves they're highly predictive)
+pm_weather_interactions = [
+    'pm2_5_temperature_interaction',   # 0.926 correlation at 1h, 0.603 at 24h
+    'pm2_5_humidity_interaction',      # 0.755 correlation at 1h, 0.665 at 12h
+    'pm2_5_pressure_interaction',      # 0.977 correlation at 1h, 0.647 at 24h
+    'pm10_temperature_interaction',    # 0.712 correlation at 1h, 0.344 at 72h
+    'pm10_humidity_interaction',       # 0.647 correlation at 1h, 0.320 at 72h
+    'pm10_pressure_interaction'        # 0.809 correlation at 1h, 0.450 at 48h
+]
+
+# KEEP 2 WEATHER-WEATHER INTERACTIONS (from Section 12)
+weather_interactions = [
     'temp_humidity_interaction',  # +0.144 improvement for PM2.5
     'temp_wind_interaction'       # +0.011 improvement for PM2.5
 ]
 
-# REMOVE 3 PROBLEMATIC INTERACTIONS
-remove_interactions = [
-    'pm2_5_temp_interaction',      # Data leakage
-    'pm2_5_humidity_interaction',  # Data leakage
-    'wind_pm2_5_interaction'       # Data leakage
-]
-
 # NEW HIGH-VALUE INTERACTIONS (based on wind direction findings)
-new_interactions = [
+wind_interactions = [
     'wind_direction_temp_interaction',
     'wind_direction_humidity_interaction',
     'pressure_humidity_interaction'
 ]
+
+# TOTAL: 11 interaction features (6 PM×weather + 2 weather×weather + 3 wind×weather)
+# Section 16 proves PM×weather interactions are the MOST predictive features discovered
 ```
 
 ### **8. Binary Indicators (Based on Section 13)**
@@ -513,7 +532,9 @@ traditional_features = [
     # Binary features (6 features only)
     'is_hot', 'is_high_pm2_5', 'is_night', 'is_morning_rush', 'is_evening_rush', 'is_high_o3',
     
-    # Interaction features (2 useful + 3 new)
+    # Interaction features (11 total - 6 PM×weather + 2 weather×weather + 3 wind×weather)
+    'pm2_5_temperature_interaction', 'pm2_5_humidity_interaction', 'pm2_5_pressure_interaction',
+    'pm10_temperature_interaction', 'pm10_humidity_interaction', 'pm10_pressure_interaction',
     'temp_humidity_interaction', 'temp_wind_interaction',
     'wind_direction_temp_interaction', 'wind_direction_humidity_interaction', 'pressure_humidity_interaction',
     
@@ -992,7 +1013,7 @@ success_criteria = {
 # MUST: Use only 1h, 2h, 3h lags for both PM2.5 and PM10
 # MUST: Handle CO-NO2 redundancy (drop NO2)
 # MUST: Reduce rolling features (32 → 7)
-# MUST: Remove data leakage interactions
+# MUST: Include PM × weather interactions (Section 16 proves they're highly predictive)
 # MUST: Fix binary feature thresholds
 ```
 
@@ -1044,9 +1065,11 @@ success_criteria = {
 - 72-hour prediction with one model = poor performance
 - Must use multi-horizon approach
 
-### **6. Data Leakage in Interactions**
-- Using PM2.5 interactions = data leakage
-- Will give misleading performance metrics
+### **6. PM × Weather Interactions (Section 16 Discovery)**
+- **CRITICAL**: PM × weather interactions are HIGHLY PREDICTIVE for future PM
+- **0.977 correlation** for PM2.5 × pressure at 1h horizon
+- **0.926 correlation** for PM2.5 × temperature at 1h horizon
+- These are the **MOST PREDICTIVE FEATURES** discovered in the entire analysis
 
 ### **7. Broken Binary Feature Thresholds**
 - 94.9% "high PM10" = threshold too low
@@ -1062,7 +1085,7 @@ success_criteria = {
 3. **Handle CO-NO2 redundancy** (drop NO2, keep CO)
 4. **Reduce rolling features** (32 → 7 features)
 5. **Fix binary feature thresholds** (PM10, pressure, wind thresholds)
-6. **Remove data leakage interactions** (PM2.5 interactions)
+6. **Include PM × weather interactions** (Section 16 proves they're highly predictive)
 7. **Add NH3 to pollutant features** (agricultural emissions)
 8. **Create lag features** (1h, 2h, 3h only)
 9. **Train baseline models** (Random Forest, XGBoost) for Day 1 forecasting

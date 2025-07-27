@@ -238,6 +238,20 @@ def create_clean_features_with_context(raw_df, existing_df):
     else:
         logger.info("New interaction features already present in existing data - preserving them")
     
+    # Add PM × weather interactions (from feature_engineering.py + new ones) - only if not already present
+    if 'pm2_5_pressure_interaction' not in engineered_df.columns:
+        # These 2 come from feature_engineering.py (already created by engineer.engineer_features())
+        # pm2_5_temp_interaction and pm2_5_humidity_interaction are already in engineered_df
+        
+        # Add the 4 new PM × weather interactions
+        engineered_df['pm2_5_pressure_interaction'] = combined_raw_df['pm2_5'] * combined_raw_df['pressure']
+        engineered_df['pm10_temperature_interaction'] = combined_raw_df['pm10'] * combined_raw_df['temperature']
+        engineered_df['pm10_humidity_interaction'] = combined_raw_df['pm10'] * combined_raw_df['humidity']
+        engineered_df['pm10_pressure_interaction'] = combined_raw_df['pm10'] * combined_raw_df['pressure']
+        logger.info("Added PM × weather interaction features")
+    else:
+        logger.info("PM × weather interaction features already present in existing data - preserving them")
+    
     # Select only the 59 clean features we want (including raw wind_direction)
     clean_features = [
         # Time columns
@@ -280,6 +294,10 @@ def create_clean_features_with_context(raw_df, existing_df):
         'temp_humidity_interaction', 'temp_wind_interaction', 'wind_direction_temp_interaction', 
         'wind_direction_humidity_interaction', 'pressure_humidity_interaction',
         
+        # PM × weather interactions (6 features) - HIGHLY PREDICTIVE
+        'pm2_5_temp_interaction', 'pm2_5_humidity_interaction', 'pm2_5_pressure_interaction',
+        'pm10_temperature_interaction', 'pm10_humidity_interaction', 'pm10_pressure_interaction',
+        
         # Pollutant-weather interactions
         'co_pressure_interaction', 'o3_temp_interaction', 'so2_humidity_interaction'
     ]
@@ -292,6 +310,7 @@ def create_clean_features_with_context(raw_df, existing_df):
     clean_df['time_str'] = clean_df['time'].dt.floor('H').dt.strftime('%Y-%m-%d %H:%M:%S')
     
     logger.info(f"Clean features created: {len(clean_df.columns)} columns")
+    logger.info(f"📊 Expected: 65 features (59 + 6 PM × weather interactions)")
     return clean_df
 
 @retry_on_network_error(max_retries=1, delay=300)  # 1 retry, 5 minute delay
@@ -412,13 +431,13 @@ def run_hourly_update():
     new_success = uploader.push_features(
         df=clean_features,
         group_name="aqi_clean_features_v2",
-        description="Clean, optimized features for AQI prediction (NEW GROUP - 59 features). Target: pm2_5 (raw concentration), AQI: us_aqi (calculated from PM2.5)."
+        description="Clean, optimized features for AQI prediction (NEW GROUP - 65 features). Target: pm2_5 (raw concentration), AQI: us_aqi (calculated from PM2.5)."
     )
     
     if old_success and new_success:
         logger.info("✅ Successfully pushed data to BOTH feature groups!")
         logger.info(f"📊 Old features: {len(old_features.columns)} columns")
-        logger.info(f"✨ Clean features: {len(clean_features.columns)} columns")
+        logger.info(f"✨ Clean features: {len(clean_features.columns)} columns (65 expected)")
         return True
     else:
         logger.error("❌ Failed to push data to one or both feature groups!")

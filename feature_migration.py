@@ -141,11 +141,15 @@ class HopsworksFeatureMigration:
             # 10. BINARY FEATURES (6 features) - OPTIMIZED
             'is_hot', 'is_night', 'is_morning_rush', 'is_evening_rush', 'is_high_pm2_5', 'is_high_o3',
             
-            # 11. INTERACTION FEATURES (5 features) - OPTIMIZED
+            # 11. INTERACTION FEATURES (11 features) - OPTIMIZED
             'temp_humidity_interaction', 'temp_wind_interaction', 'wind_direction_temp_interaction', 
             'wind_direction_humidity_interaction', 'pressure_humidity_interaction',
             
-            # 12. POLLUTANT-WEATHER INTERACTIONS (3 features) - NEW
+            # 12. PM × WEATHER INTERACTIONS (6 features) - HIGHLY PREDICTIVE
+            'pm2_5_temp_interaction', 'pm2_5_humidity_interaction', 'pm2_5_pressure_interaction',
+            'pm10_temperature_interaction', 'pm10_humidity_interaction', 'pm10_pressure_interaction',
+            
+            # 13. POLLUTANT-WEATHER INTERACTIONS (3 features) - NEW
             'co_pressure_interaction', 'o3_temp_interaction', 'so2_humidity_interaction'
         ]
         
@@ -185,6 +189,17 @@ class HopsworksFeatureMigration:
         engineered_df['co_pressure_interaction'] = df['carbon_monoxide'] * df['pressure']
         engineered_df['o3_temp_interaction'] = df['ozone'] * df['temperature']
         engineered_df['so2_humidity_interaction'] = df['sulphur_dioxide'] * df['humidity']
+        
+        # Add PM × weather interactions (from feature_engineering.py + new ones)
+        print("🔥 Adding PM × weather interaction features...")
+        # These 2 come from feature_engineering.py (already created by engineer.engineer_features())
+        # pm2_5_temp_interaction and pm2_5_humidity_interaction are already in engineered_df
+        
+        # Add the 4 new PM × weather interactions
+        engineered_df['pm2_5_pressure_interaction'] = df['pm2_5'] * df['pressure']
+        engineered_df['pm10_temperature_interaction'] = df['pm10'] * df['temperature']
+        engineered_df['pm10_humidity_interaction'] = df['pm10'] * df['humidity']
+        engineered_df['pm10_pressure_interaction'] = df['pm10'] * df['pressure']
         
         # Select only the clean features
         available_features = [f for f in clean_features if f in engineered_df.columns]
@@ -269,7 +284,7 @@ class HopsworksFeatureMigration:
         print(f"   Infinite values: {np.isinf(clean_data.select_dtypes(include=[np.number])).sum().sum()}")
         
         # Check feature counts
-        expected_features = 59  # Based on our plan (including raw wind_direction)
+        expected_features = 65  # Updated: 59 + 6 PM × weather interactions
         actual_features = len(clean_data.columns)
         print(f"📊 Feature count: {actual_features} (expected: {expected_features})")
         

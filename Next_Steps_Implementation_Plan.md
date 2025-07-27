@@ -8,7 +8,9 @@
 **Current State**: Comprehensive EDA complete, engineering plan finalized  
 **Next Phase**: Implementation of clean feature pipeline and model development  
 **Timeline**: 6-8 weeks to production-ready system  
-**Critical Path**: Wind direction engineering + clean feature store
+**Critical Path**: Wind direction engineering + PM×weather interactions + clean feature store
+
+**🚨 CRITICAL UPDATE**: Section 16 analysis discovered that PM×weather interactions are the MOST predictive features (0.977 correlation for PM2.5×pressure at 1h). These were incorrectly labeled as "data leakage" in Section 12.
 
 ---
 
@@ -133,7 +135,7 @@ def create_optimized_features(df):
     binary_features = create_optimized_binary_features(df)
     df = pd.concat([df, binary_features], axis=1)
     
-    # Add 5 optimized interaction features (remove 3 data leakage ones)
+    # Add 11 optimized interaction features (6 PM×weather + 2 weather×weather + 3 wind×weather)
     interaction_features = create_optimized_interaction_features(df)
     df = pd.concat([df, interaction_features], axis=1)
     
@@ -146,7 +148,7 @@ def create_optimized_features(df):
 - [ ] Optimized lag features (1h, 2h, 3h only)
 - [ ] 7 rolling features (removed 25 useless ones)
 - [ ] 6 binary features (removed 11 useless ones)
-- [ ] 5 interaction features (removed 3 data leakage ones)
+- [ ] 11 interaction features (6 PM×weather + 2 weather×weather + 3 wind×weather)
 - [ ] Pollutant lag features
 - [ ] Cyclical time features
 
@@ -793,10 +795,11 @@ success_metrics = {
 
 **Key Success Factors:**
 1. **Wind direction engineering** (Week 1) - Most critical missing feature
-2. **Clean feature pipeline** (Week 1) - Transform 127 → 58 features
-3. **Single deep learning model** (Week 2) - LSTM/GRU sequence-to-sequence for all horizons
-4. **Weather forecast integration** (Week 3) - Essential for 48h+ predictions
-5. **Complete prediction pipeline** (Week 4) - End-to-end system (no interpolation needed)
+2. **PM×weather interactions** (Week 1) - MOST predictive features discovered (0.977 correlation)
+3. **Clean feature pipeline** (Week 1) - Transform 127 → 58 features
+4. **Single deep learning model** (Week 2) - LSTM/GRU sequence-to-sequence for all horizons
+5. **Weather forecast integration** (Week 3) - Essential for 48h+ predictions
+6. **Complete prediction pipeline** (Week 4) - End-to-end system (no interpolation needed)
 
 **Expected Outcome:**
 - **Day 1 forecasting**: 85-90% AQI category accuracy
