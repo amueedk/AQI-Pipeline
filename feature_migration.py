@@ -145,9 +145,9 @@ class HopsworksFeatureMigration:
             'temp_humidity_interaction', 'temp_wind_interaction', 'wind_direction_temp_interaction', 
             'wind_direction_humidity_interaction', 'pressure_humidity_interaction',
             
-            # 12. PM × WEATHER INTERACTIONS (6 features) - HIGHLY PREDICTIVE
+            # 12. PM × WEATHER INTERACTIONS (5 features) - HIGHLY PREDICTIVE
             'pm2_5_temp_interaction', 'pm2_5_humidity_interaction', 'pm2_5_pressure_interaction',
-            'pm10_temperature_interaction', 'pm10_humidity_interaction', 'pm10_pressure_interaction',
+            'pm10_temperature_interaction', 'pm10_pressure_interaction',
             
             # 13. POLLUTANT-WEATHER INTERACTIONS (3 features) - NEW
             'co_pressure_interaction', 'o3_temp_interaction', 'so2_humidity_interaction'
@@ -195,10 +195,9 @@ class HopsworksFeatureMigration:
         # These 2 come from feature_engineering.py (already created by engineer.engineer_features())
         # pm2_5_temp_interaction and pm2_5_humidity_interaction are already in engineered_df
         
-        # Add the 4 new PM × weather interactions
+        # Add the 3 new PM × weather interactions
         engineered_df['pm2_5_pressure_interaction'] = df['pm2_5'] * df['pressure']
         engineered_df['pm10_temperature_interaction'] = df['pm10'] * df['temperature']
-        engineered_df['pm10_humidity_interaction'] = df['pm10'] * df['humidity']
         engineered_df['pm10_pressure_interaction'] = df['pm10'] * df['pressure']
         
         # Select only the clean features
@@ -284,7 +283,7 @@ class HopsworksFeatureMigration:
         print(f"   Infinite values: {np.isinf(clean_data.select_dtypes(include=[np.number])).sum().sum()}")
         
         # Check feature counts
-        expected_features = 65  # Updated: 59 + 6 PM × weather interactions
+        expected_features = 64  # Updated: 59 + 5 PM × weather interactions
         actual_features = len(clean_data.columns)
         print(f"📊 Feature count: {actual_features} (expected: {expected_features})")
         
