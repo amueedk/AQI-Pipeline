@@ -268,16 +268,16 @@ def create_clean_features_with_context(raw_df, existing_df):
         # Wind direction engineering
         'wind_direction_sin', 'wind_direction_cos', 'is_wind_from_high_pm', 'is_wind_from_low_pm',
         
-        # Lag features (1h, 2h, 3h only)
-        'pm2_5_lag_1h', 'pm2_5_lag_2h', 'pm2_5_lag_3h',
-        'pm10_lag_1h', 'pm10_lag_2h', 'pm10_lag_3h',
+        # Lag features (1h, 2h, 3h, 24h)
+        'pm2_5_lag_1h', 'pm2_5_lag_2h', 'pm2_5_lag_3h', 'pm2_5_lag_24h',
+        'pm10_lag_1h', 'pm10_lag_2h', 'pm10_lag_3h', 'pm10_lag_24h',
         
         # Pollutant lags
         'co_lag_1h', 'o3_lag_1h', 'so2_lag_1h',
         
         # Rolling features (optimized)
-        'pm2_5_rolling_min_3h', 'pm2_5_rolling_mean_3h', 'pm2_5_rolling_min_12h', 'pm2_5_rolling_mean_12h',
-        'pm10_rolling_min_3h', 'pm10_rolling_mean_3h', 'pm10_rolling_mean_24h',
+        'pm2_5_rolling_min_3h', 'pm2_5_rolling_mean_3h', 'pm2_5_rolling_max_3h', 'pm2_5_rolling_min_12h', 'pm2_5_rolling_mean_12h', 'pm2_5_rolling_max_12h', 'pm2_5_rolling_mean_24h', 'pm2_5_rolling_max_24h',
+        'pm10_rolling_min_3h', 'pm10_rolling_mean_3h', 'pm10_rolling_mean_12h', 'pm10_rolling_mean_24h',
         
         # Change rates
         'pm2_5_change_rate_1h', 'pm2_5_change_rate_6h', 'pm2_5_change_rate_24h',
@@ -309,7 +309,7 @@ def create_clean_features_with_context(raw_df, existing_df):
     clean_df['time_str'] = clean_df['time'].dt.floor('H').dt.strftime('%Y-%m-%d %H:%M:%S')
     
     logger.info(f"Clean features created: {len(clean_df.columns)} columns")
-    logger.info(f"📊 Expected: 64 features (59 + 5 PM × weather interactions)")
+    logger.info(f"📊 Expected: 72 features (67 + 5 PM × weather interactions)")
     return clean_df
 
 @retry_on_network_error(max_retries=1, delay=300)  # 1 retry, 5 minute delay

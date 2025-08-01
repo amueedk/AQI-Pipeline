@@ -120,16 +120,16 @@ class HopsworksFeatureMigration:
             # 4. WIND DIRECTION ENGINEERING (4 features) - NEW
             'wind_direction_sin', 'wind_direction_cos', 'is_wind_from_high_pm', 'is_wind_from_low_pm',
             
-            # 5. LAG FEATURES (6 features) - 1h, 2h, 3h only
-            'pm2_5_lag_1h', 'pm2_5_lag_2h', 'pm2_5_lag_3h',
-            'pm10_lag_1h', 'pm10_lag_2h', 'pm10_lag_3h',
+            # 5. LAG FEATURES (8 features) - 1h, 2h, 3h, 24h
+            'pm2_5_lag_1h', 'pm2_5_lag_2h', 'pm2_5_lag_3h', 'pm2_5_lag_24h',
+            'pm10_lag_1h', 'pm10_lag_2h', 'pm10_lag_3h', 'pm10_lag_24h',
             
             # 6. POLLUTANT LAGS (3 features) - NEW
             'co_lag_1h', 'o3_lag_1h', 'so2_lag_1h',
             
-            # 7. ROLLING FEATURES (7 features) - OPTIMIZED
-            'pm2_5_rolling_min_3h', 'pm2_5_rolling_mean_3h', 'pm2_5_rolling_min_12h', 'pm2_5_rolling_mean_12h',
-            'pm10_rolling_min_3h', 'pm10_rolling_mean_3h', 'pm10_rolling_mean_24h',
+            # 7. ROLLING FEATURES (12 features) - OPTIMIZED
+            'pm2_5_rolling_min_3h', 'pm2_5_rolling_mean_3h', 'pm2_5_rolling_max_3h', 'pm2_5_rolling_min_12h', 'pm2_5_rolling_mean_12h', 'pm2_5_rolling_max_12h', 'pm2_5_rolling_mean_24h', 'pm2_5_rolling_max_24h',
+            'pm10_rolling_min_3h', 'pm10_rolling_mean_3h', 'pm10_rolling_mean_12h', 'pm10_rolling_mean_24h',
             
             # 8. CHANGE RATES (6 features)
             'pm2_5_change_rate_1h', 'pm2_5_change_rate_6h', 'pm2_5_change_rate_24h',
@@ -283,7 +283,7 @@ class HopsworksFeatureMigration:
         print(f"   Infinite values: {np.isinf(clean_data.select_dtypes(include=[np.number])).sum().sum()}")
         
         # Check feature counts
-        expected_features = 64  # Updated: 59 + 5 PM × weather interactions
+        expected_features = 72  # Updated: 67 + 5 PM × weather interactions
         actual_features = len(clean_data.columns)
         print(f"📊 Feature count: {actual_features} (expected: {expected_features})")
         
