@@ -29,6 +29,96 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+def get_tolerance(period: int, feature_type: str = 'lag'):
+    """
+    Get tolerance based on period and feature type with custom specifications
+    """
+    from datetime import timedelta
+    if feature_type == 'lag' or feature_type == 'change_rate':
+        # Custom tolerance specifications
+        if period == 1:
+            tolerance_hours = 0.5  # ±30min for 1h
+        elif period == 2:
+            tolerance_hours = 0.75  # ±45min for 2h
+        elif period == 3:
+            tolerance_hours = 50/60  # ±50min for 3h
+        else:
+            # All other periods (6h, 12h, 24h, 48h, 72h) get 1h tolerance
+            tolerance_hours = 1.0
+        return timedelta(hours=tolerance_hours)
+    elif feature_type == 'rolling':
+        # Rolling features don't use tolerance anyway (uses ALL data in window)
+        tolerance_hours = period * 0.25
+        return timedelta(hours=tolerance_hours)
+
+def create_time_based_lag(df: pd.DataFrame, target: str, lag_hours: int) -> pd.Series:
+    """
+    Create time-based lag feature that finds data approximately lag_hours ago
+    """
+    import numpy as np
+    from datetime import timedelta
+    
+    lag_series = pd.Series(index=df.index, dtype=float)
+    tolerance = get_tolerance(lag_hours, 'lag')
+    
+    for i, current_time in enumerate(df.index):
+        target_time = current_time - timedelta(hours=lag_hours)
+        
+        # Find data within acceptable range
+        acceptable_range_start = target_time - tolerance
+        acceptable_range_end = target_time + tolerance
+        
+        # Use pandas boolean indexing for efficiency
+        mask = (df.index >= acceptable_range_start) & (df.index <= acceptable_range_end)
+        matching_data = df[mask][target]
+        
+        if len(matching_data) > 0:
+            # Use the closest data point to target_time
+            matching_indices = df.index[mask]
+            time_diffs = [(idx - target_time).total_seconds() for idx in matching_indices]
+            min_diff_idx = np.argmin(np.abs(time_diffs))
+            closest_idx = matching_indices[min_diff_idx]
+            
+            # Handle potential duplicate timestamps by ensuring scalar value
+            value = df.loc[closest_idx, target]
+            lag_series.iloc[i] = value if np.isscalar(value) else value.iloc[0]
+        else:
+            lag_series.iloc[i] = np.nan
+    
+    return lag_series
+
+def create_time_based_rolling(df: pd.DataFrame, target: str, window_hours: int, stat_type: str) -> pd.Series:
+    """
+    Create time-based rolling statistics using ALL data in the time window
+    """
+    import numpy as np
+    from datetime import timedelta
+    
+    rolling_series = pd.Series(index=df.index, dtype=float)
+    
+    for i, current_time in enumerate(df.index):
+        window_start = current_time - timedelta(hours=window_hours)
+        
+        # Get ALL data in the window (no tolerance checks)
+        window_mask = (df.index >= window_start) & (df.index <= current_time)
+        window_data = df[window_mask][target]
+        
+        if len(window_data) < 2:
+            rolling_series.iloc[i] = np.nan
+            continue
+        
+        # Calculate rolling statistic with all available data
+        if stat_type == 'mean':
+            rolling_series.iloc[i] = window_data.mean()
+        elif stat_type == 'std':
+            rolling_series.iloc[i] = window_data.std()
+        elif stat_type == 'min':
+            rolling_series.iloc[i] = window_data.min()
+        elif stat_type == 'max':
+            rolling_series.iloc[i] = window_data.max()
+    
+    return rolling_series
+
 def fetch_existing_hopsworks_data(uploader, group_name):
     """
     Fetch existing data from Hopsworks feature group.
@@ -222,35 +312,36 @@ def create_clean_features_with_context(raw_df, existing_df):
     o3_col = 'ozone' if 'ozone' in combined_raw_df.columns else 'o3'
     so2_col = 'sulphur_dioxide' if 'sulphur_dioxide' in combined_raw_df.columns else 'so2'
     
-    engineered_df['co_lag_1h'] = combined_raw_df[co_col].shift(1)
-    engineered_df['o3_lag_1h'] = combined_raw_df[o3_col].shift(1)
-    engineered_df['so2_lag_1h'] = combined_raw_df[so2_col].shift(1)
+    # Add pollutant lags using exact time-based formulas
+    engineered_df['co_lag_1h'] = create_time_based_lag(combined_raw_df, co_col, 1)
+    engineered_df['o3_lag_1h'] = create_time_based_lag(combined_raw_df, o3_col, 1)
+    engineered_df['so2_lag_1h'] = create_time_based_lag(combined_raw_df, so2_col, 1)
     
-    # Add weather lags (NEW FEATURES)
-    engineered_df['temp_lag_1h'] = combined_raw_df['temperature'].shift(1)
-    engineered_df['wind_speed_lag_1h'] = combined_raw_df['wind_speed'].shift(1)
-    engineered_df['humidity_lag_1h'] = combined_raw_df['humidity'].shift(1)
-    engineered_df['pressure_lag_1h'] = combined_raw_df['pressure'].shift(1)
+    # Add weather lags (NEW FEATURES) using exact time-based formulas
+    engineered_df['temp_lag_1h'] = create_time_based_lag(combined_raw_df, 'temperature', 1)
+    engineered_df['wind_speed_lag_1h'] = create_time_based_lag(combined_raw_df, 'wind_speed', 1)
+    engineered_df['humidity_lag_1h'] = create_time_based_lag(combined_raw_df, 'humidity', 1)
+    engineered_df['pressure_lag_1h'] = create_time_based_lag(combined_raw_df, 'pressure', 1)
     
-    # Add ozone lag 3h (NEW FEATURE)
-    engineered_df['ozone_lag_3h'] = combined_raw_df[o3_col].shift(3)
+    # Add ozone lag 3h (NEW FEATURE) using exact time-based formula
+    engineered_df['ozone_lag_3h'] = create_time_based_lag(combined_raw_df, o3_col, 3)
     
-    # Add weather rolling features (NEW FEATURES) - using same formulas as PM features
+    # Add weather rolling features (NEW FEATURES) using exact time-based formulas
     # 3h rolling features
-    engineered_df['temp_rolling_mean_3h'] = combined_raw_df['temperature'].rolling(window=3, min_periods=1).mean()
-    engineered_df['humidity_rolling_mean_3h'] = combined_raw_df['humidity'].rolling(window=3, min_periods=1).mean()
-    engineered_df['wind_speed_rolling_mean_3h'] = combined_raw_df['wind_speed'].rolling(window=3, min_periods=1).mean()
-    engineered_df['pressure_rolling_mean_3h'] = combined_raw_df['pressure'].rolling(window=3, min_periods=1).mean()
+    engineered_df['temp_rolling_mean_3h'] = create_time_based_rolling(combined_raw_df, 'temperature', 3, 'mean')
+    engineered_df['humidity_rolling_mean_3h'] = create_time_based_rolling(combined_raw_df, 'humidity', 3, 'mean')
+    engineered_df['wind_speed_rolling_mean_3h'] = create_time_based_rolling(combined_raw_df, 'wind_speed', 3, 'mean')
+    engineered_df['pressure_rolling_mean_3h'] = create_time_based_rolling(combined_raw_df, 'pressure', 3, 'mean')
     
     # 12h rolling features
-    engineered_df['temp_rolling_mean_12h'] = combined_raw_df['temperature'].rolling(window=12, min_periods=1).mean()
-    engineered_df['humidity_rolling_mean_12h'] = combined_raw_df['humidity'].rolling(window=12, min_periods=1).mean()
-    engineered_df['wind_speed_rolling_mean_12h'] = combined_raw_df['wind_speed'].rolling(window=12, min_periods=1).mean()
-    engineered_df['pressure_rolling_mean_12h'] = combined_raw_df['pressure'].rolling(window=12, min_periods=1).mean()
+    engineered_df['temp_rolling_mean_12h'] = create_time_based_rolling(combined_raw_df, 'temperature', 12, 'mean')
+    engineered_df['humidity_rolling_mean_12h'] = create_time_based_rolling(combined_raw_df, 'humidity', 12, 'mean')
+    engineered_df['wind_speed_rolling_mean_12h'] = create_time_based_rolling(combined_raw_df, 'wind_speed', 12, 'mean')
+    engineered_df['pressure_rolling_mean_12h'] = create_time_based_rolling(combined_raw_df, 'pressure', 12, 'mean')
     
-    # Add ozone rolling features (NEW FEATURES)
-    engineered_df['ozone_rolling_mean_3h'] = combined_raw_df[o3_col].rolling(window=3, min_periods=1).mean()
-    engineered_df['ozone_rolling_mean_12h'] = combined_raw_df[o3_col].rolling(window=12, min_periods=1).mean()
+    # Add ozone rolling features (NEW FEATURES) using exact time-based formulas
+    engineered_df['ozone_rolling_mean_3h'] = create_time_based_rolling(combined_raw_df, o3_col, 3, 'mean')
+    engineered_df['ozone_rolling_mean_12h'] = create_time_based_rolling(combined_raw_df, o3_col, 12, 'mean')
     
     # Add new interactions (not in feature_engineering.py) - only if not already present
     if 'wind_direction_temp_interaction' not in engineered_df.columns:
