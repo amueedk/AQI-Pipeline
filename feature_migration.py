@@ -124,12 +124,25 @@ class HopsworksFeatureMigration:
             'pm2_5_lag_1h', 'pm2_5_lag_2h', 'pm2_5_lag_3h', 'pm2_5_lag_24h',
             'pm10_lag_1h', 'pm10_lag_2h', 'pm10_lag_3h', 'pm10_lag_24h',
             
-            # 6. POLLUTANT LAGS (3 features) - NEW
-            'co_lag_1h', 'o3_lag_1h', 'so2_lag_1h',
+                    # 6. POLLUTANT LAGS (3 features) - NEW
+        'co_lag_1h', 'o3_lag_1h', 'so2_lag_1h',
+        
+        # 6a. WEATHER LAGS (4 features) - NEW
+        'temp_lag_1h', 'wind_speed_lag_1h', 'humidity_lag_1h', 'pressure_lag_1h',
+        
+        # 6b. OZONE LAG 3H (1 feature) - NEW
+        'ozone_lag_3h',
             
-            # 7. ROLLING FEATURES (12 features) - OPTIMIZED
-            'pm2_5_rolling_min_3h', 'pm2_5_rolling_mean_3h', 'pm2_5_rolling_max_3h', 'pm2_5_rolling_min_12h', 'pm2_5_rolling_mean_12h', 'pm2_5_rolling_max_12h', 'pm2_5_rolling_mean_24h', 'pm2_5_rolling_max_24h',
-            'pm10_rolling_min_3h', 'pm10_rolling_mean_3h', 'pm10_rolling_mean_12h', 'pm10_rolling_mean_24h',
+                    # 7. ROLLING FEATURES (12 features) - OPTIMIZED
+        'pm2_5_rolling_min_3h', 'pm2_5_rolling_mean_3h', 'pm2_5_rolling_max_3h', 'pm2_5_rolling_min_12h', 'pm2_5_rolling_mean_12h', 'pm2_5_rolling_max_12h', 'pm2_5_rolling_mean_24h', 'pm2_5_rolling_max_24h',
+        'pm10_rolling_min_3h', 'pm10_rolling_mean_3h', 'pm10_rolling_mean_12h', 'pm10_rolling_mean_24h',
+        
+        # 7a. WEATHER ROLLING FEATURES (8 features) - NEW
+        'temp_rolling_mean_3h', 'humidity_rolling_mean_3h', 'wind_speed_rolling_mean_3h', 'pressure_rolling_mean_3h',
+        'temp_rolling_mean_12h', 'humidity_rolling_mean_12h', 'wind_speed_rolling_mean_12h', 'pressure_rolling_mean_12h',
+        
+        # 7b. OZONE ROLLING FEATURES (2 features) - NEW
+        'ozone_rolling_mean_3h', 'ozone_rolling_mean_12h',
             
             # 8. CHANGE RATES (6 features)
             'pm2_5_change_rate_1h', 'pm2_5_change_rate_6h', 'pm2_5_change_rate_24h',
@@ -181,6 +194,16 @@ class HopsworksFeatureMigration:
         engineered_df['o3_lag_1h'] = df['ozone'].shift(1)
         engineered_df['so2_lag_1h'] = df['sulphur_dioxide'].shift(1)
         
+        # Add weather lags (NEW FEATURES)
+        print("🌤️ Adding weather lags...")
+        engineered_df['temp_lag_1h'] = df['temperature'].shift(1)
+        engineered_df['wind_speed_lag_1h'] = df['wind_speed'].shift(1)
+        engineered_df['humidity_lag_1h'] = df['humidity'].shift(1)
+        engineered_df['pressure_lag_1h'] = df['pressure'].shift(1)
+        
+        # Add ozone lag 3h (NEW FEATURE)
+        engineered_df['ozone_lag_3h'] = df['ozone'].shift(3)
+        
         # Add new interactions (not in feature_engineering.py)
         print("🔗 Adding new interaction features...")
         engineered_df['wind_direction_temp_interaction'] = engineered_df['wind_direction_sin'] * df['temperature']
@@ -189,6 +212,24 @@ class HopsworksFeatureMigration:
         engineered_df['co_pressure_interaction'] = df['carbon_monoxide'] * df['pressure']
         engineered_df['o3_temp_interaction'] = df['ozone'] * df['temperature']
         engineered_df['so2_humidity_interaction'] = df['sulphur_dioxide'] * df['humidity']
+        
+        # Add weather rolling features (NEW FEATURES) - using same formulas as PM features
+        print("🌤️ Adding weather rolling features...")
+        # 3h rolling features
+        engineered_df['temp_rolling_mean_3h'] = df['temperature'].rolling(window=3, min_periods=1).mean()
+        engineered_df['humidity_rolling_mean_3h'] = df['humidity'].rolling(window=3, min_periods=1).mean()
+        engineered_df['wind_speed_rolling_mean_3h'] = df['wind_speed'].rolling(window=3, min_periods=1).mean()
+        engineered_df['pressure_rolling_mean_3h'] = df['pressure'].rolling(window=3, min_periods=1).mean()
+        
+        # 12h rolling features
+        engineered_df['temp_rolling_mean_12h'] = df['temperature'].rolling(window=12, min_periods=1).mean()
+        engineered_df['humidity_rolling_mean_12h'] = df['humidity'].rolling(window=12, min_periods=1).mean()
+        engineered_df['wind_speed_rolling_mean_12h'] = df['wind_speed'].rolling(window=12, min_periods=1).mean()
+        engineered_df['pressure_rolling_mean_12h'] = df['pressure'].rolling(window=12, min_periods=1).mean()
+        
+        # Add ozone rolling features (NEW FEATURES)
+        engineered_df['ozone_rolling_mean_3h'] = df['ozone'].rolling(window=3, min_periods=1).mean()
+        engineered_df['ozone_rolling_mean_12h'] = df['ozone'].rolling(window=12, min_periods=1).mean()
         
         # Add PM × weather interactions (from feature_engineering.py + new ones)
         print("🔥 Adding PM × weather interaction features...")
@@ -216,6 +257,7 @@ class HopsworksFeatureMigration:
         print(f"📊 Clean features: {len(clean_df.columns)} columns")
         print(f"📊 Clean rows: {len(clean_df)} rows")
         print(f"✅ Available features: {len(available_features)}")
+        print(f"📊 Expected: 87 features (72 + 15 new weather/ozone features)")
         
         return clean_df
     
@@ -283,7 +325,7 @@ class HopsworksFeatureMigration:
         print(f"   Infinite values: {np.isinf(clean_data.select_dtypes(include=[np.number])).sum().sum()}")
         
         # Check feature counts
-        expected_features = 72  # Updated: 67 + 5 PM × weather interactions
+        expected_features = 87  # Updated: 72 + 15 new weather/ozone features
         actual_features = len(clean_data.columns)
         print(f"📊 Feature count: {actual_features} (expected: {expected_features})")
         

@@ -226,6 +226,32 @@ def create_clean_features_with_context(raw_df, existing_df):
     engineered_df['o3_lag_1h'] = combined_raw_df[o3_col].shift(1)
     engineered_df['so2_lag_1h'] = combined_raw_df[so2_col].shift(1)
     
+    # Add weather lags (NEW FEATURES)
+    engineered_df['temp_lag_1h'] = combined_raw_df['temperature'].shift(1)
+    engineered_df['wind_speed_lag_1h'] = combined_raw_df['wind_speed'].shift(1)
+    engineered_df['humidity_lag_1h'] = combined_raw_df['humidity'].shift(1)
+    engineered_df['pressure_lag_1h'] = combined_raw_df['pressure'].shift(1)
+    
+    # Add ozone lag 3h (NEW FEATURE)
+    engineered_df['ozone_lag_3h'] = combined_raw_df[o3_col].shift(3)
+    
+    # Add weather rolling features (NEW FEATURES) - using same formulas as PM features
+    # 3h rolling features
+    engineered_df['temp_rolling_mean_3h'] = combined_raw_df['temperature'].rolling(window=3, min_periods=1).mean()
+    engineered_df['humidity_rolling_mean_3h'] = combined_raw_df['humidity'].rolling(window=3, min_periods=1).mean()
+    engineered_df['wind_speed_rolling_mean_3h'] = combined_raw_df['wind_speed'].rolling(window=3, min_periods=1).mean()
+    engineered_df['pressure_rolling_mean_3h'] = combined_raw_df['pressure'].rolling(window=3, min_periods=1).mean()
+    
+    # 12h rolling features
+    engineered_df['temp_rolling_mean_12h'] = combined_raw_df['temperature'].rolling(window=12, min_periods=1).mean()
+    engineered_df['humidity_rolling_mean_12h'] = combined_raw_df['humidity'].rolling(window=12, min_periods=1).mean()
+    engineered_df['wind_speed_rolling_mean_12h'] = combined_raw_df['wind_speed'].rolling(window=12, min_periods=1).mean()
+    engineered_df['pressure_rolling_mean_12h'] = combined_raw_df['pressure'].rolling(window=12, min_periods=1).mean()
+    
+    # Add ozone rolling features (NEW FEATURES)
+    engineered_df['ozone_rolling_mean_3h'] = combined_raw_df[o3_col].rolling(window=3, min_periods=1).mean()
+    engineered_df['ozone_rolling_mean_12h'] = combined_raw_df[o3_col].rolling(window=12, min_periods=1).mean()
+    
     # Add new interactions (not in feature_engineering.py) - only if not already present
     if 'wind_direction_temp_interaction' not in engineered_df.columns:
         engineered_df['wind_direction_temp_interaction'] = engineered_df['wind_direction_sin'] * combined_raw_df['temperature']
@@ -275,9 +301,22 @@ def create_clean_features_with_context(raw_df, existing_df):
         # Pollutant lags
         'co_lag_1h', 'o3_lag_1h', 'so2_lag_1h',
         
+        # Weather lags (NEW FEATURES)
+        'temp_lag_1h', 'wind_speed_lag_1h', 'humidity_lag_1h', 'pressure_lag_1h',
+        
+        # Ozone lag 3h (NEW FEATURE)
+        'ozone_lag_3h',
+        
         # Rolling features (optimized)
         'pm2_5_rolling_min_3h', 'pm2_5_rolling_mean_3h', 'pm2_5_rolling_max_3h', 'pm2_5_rolling_min_12h', 'pm2_5_rolling_mean_12h', 'pm2_5_rolling_max_12h', 'pm2_5_rolling_mean_24h', 'pm2_5_rolling_max_24h',
         'pm10_rolling_min_3h', 'pm10_rolling_mean_3h', 'pm10_rolling_mean_12h', 'pm10_rolling_mean_24h',
+        
+        # Weather rolling features (NEW FEATURES)
+        'temp_rolling_mean_3h', 'humidity_rolling_mean_3h', 'wind_speed_rolling_mean_3h', 'pressure_rolling_mean_3h',
+        'temp_rolling_mean_12h', 'humidity_rolling_mean_12h', 'wind_speed_rolling_mean_12h', 'pressure_rolling_mean_12h',
+        
+        # Ozone rolling features (NEW FEATURES)
+        'ozone_rolling_mean_3h', 'ozone_rolling_mean_12h',
         
         # Change rates
         'pm2_5_change_rate_1h', 'pm2_5_change_rate_6h', 'pm2_5_change_rate_24h',
@@ -309,7 +348,7 @@ def create_clean_features_with_context(raw_df, existing_df):
     clean_df['time_str'] = clean_df['time'].dt.floor('H').dt.strftime('%Y-%m-%d %H:%M:%S')
     
     logger.info(f"Clean features created: {len(clean_df.columns)} columns")
-    logger.info(f"📊 Expected: 72 features (67 + 5 PM × weather interactions)")
+    logger.info(f"📊 Expected: 87 features (72 + 15 new weather/ozone features)")
     return clean_df
 
 @retry_on_network_error(max_retries=1, delay=300)  # 1 retry, 5 minute delay
