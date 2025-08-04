@@ -1,13 +1,13 @@
 """
-Automated Hourly Data Run - Updated for Dual Feature Groups
+Automated Hourly Data Run - Clean Version (NEW GROUP ONLY)
 ------------------------------------------------------------
 This script is designed to be run automatically (e.g., by a GitHub Action)
 on an hourly schedule.
 
 It will:
 1. Fetch the most recent air quality and weather data (current hour).
-2. Engineer features for this new data.
-3. Push the resulting features to BOTH old and new feature groups.
+2. Engineer features for this new data using the NEW group logic.
+3. Push the resulting features to the NEW feature group only.
 """
 import logging
 import os
@@ -22,7 +22,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler("logs/automated_run_updated.log"),
+        logging.FileHandler("logs/automated_run_clean.log"),
         logging.StreamHandler()
     ]
 )
@@ -178,63 +178,9 @@ def fetch_existing_hopsworks_data(uploader, group_name):
         logger.info("Will proceed with only new data (lag features will be NaN for first few records).")
         return pd.DataFrame()
 
-def create_old_features_with_context(raw_df, existing_df):
-    """
-    Create old 127 messy features with historical context from OLD group
-    """
-    logger.info("Creating old features with historical context from OLD group...")
-    
-    # Sort existing data by timestamp to ensure proper lag feature calculation
-    if not existing_df.empty:
-        existing_df = existing_df.sort_index()
-        logger.info("Sorted existing data by timestamp for proper lag feature calculation")
-    
-    # Combine existing and new data for proper feature engineering
-    if not existing_df.empty:
-        logger.info("Combining existing and new data for proper feature engineering...")
-        
-        # Extract raw features from existing data for combination
-        raw_features = ['temperature', 'humidity', 'pressure', 'wind_speed', 'wind_direction',
-                       'carbon_monoxide', 'no', 'nitrogen_dioxide', 'ozone', 'sulphur_dioxide', 
-                       'pm2_5', 'pm10', 'nh3', 'openweather_aqi', 'pm2_5_aqi', 'pm10_aqi', 'us_aqi',
-                       'city', 'latitude', 'longitude']
-        
-        # Get only raw features from existing data
-        available_raw_features = [col for col in raw_features if col in existing_df.columns]
-        existing_raw_df = existing_df[available_raw_features].copy()
-        
-        logger.info(f"Extracted {len(available_raw_features)} raw features from existing data")
-        
-        # Combine raw data (existing + new)
-        combined_raw_df = pd.concat([existing_raw_df, raw_df], axis=0)
-        
-        # Sort by timestamp
-        combined_raw_df = combined_raw_df.sort_index()
-        
-        logger.info(f"Combined dataset: {len(existing_raw_df)} existing + {len(raw_df)} new = {len(combined_raw_df)} total records")
-        logger.info(f"Date range: {combined_raw_df.index.min()} to {combined_raw_df.index.max()}")
-        
-    else:
-        logger.info("No existing data found. Using only new data...")
-        combined_raw_df = raw_df
-    
-    # Use the SAME feature engineering as original script
-    engineer = AQIFeatureEngineer()
-    engineered_df = engineer.engineer_features(combined_raw_df)
-    
-    if engineered_df.empty:
-        logger.error("Old feature engineering failed")
-        return None
-    
-    # Create time_str for Hopsworks (same as original)
-    engineered_df['time_str'] = engineered_df['time'].dt.floor('H').dt.strftime('%Y-%m-%d %H:%M:%S')
-    
-    logger.info(f"Old features created: {len(engineered_df.columns)} columns")
-    return engineered_df
-
 def create_clean_features_with_context(raw_df, existing_df):
     """
-    Create new 59 clean features with historical context from NEW group
+    Create clean features with historical context from NEW group
     """
     logger.info("Creating clean features with historical context from NEW group...")
     
@@ -368,7 +314,7 @@ def create_clean_features_with_context(raw_df, existing_df):
     else:
         logger.info("PM × weather interaction features already present in existing data - preserving them")
     
-    # Select only the 59 clean features we want (including raw wind_direction)
+    # Select only the 87 clean features we want (including raw wind_direction)
     clean_features = [
         # Time columns
         'time', 'time_str',
@@ -445,10 +391,10 @@ def create_clean_features_with_context(raw_df, existing_df):
 @retry_on_network_error(max_retries=1, delay=300)  # 1 retry, 5 minute delay
 def run_hourly_update():
     """
-    Executes the hourly data update pipeline for dual feature groups.
+    Executes the hourly data update pipeline for NEW feature group only.
     """
     logger.info("=======================================")
-    logger.info("=== STARTING AUTOMATED HOURLY UPDATE (DUAL FEATURE GROUPS) ===")
+    logger.info("=== STARTING AUTOMATED HOURLY UPDATE (NEW GROUP ONLY) ===")
     logger.info("=======================================")
     
     # Debug: Check API keys are loaded
@@ -478,10 +424,9 @@ def run_hourly_update():
         logger.error("Could not connect to Hopsworks. Aborting.")
         return False
 
-    # 2. Fetch existing data from BOTH feature groups for lag/rolling features
-    logger.info("STEP 2: Fetching existing data from both feature groups...")
-    existing_old_df = fetch_existing_hopsworks_data(uploader, "multan_aqi_features_clean")
-    existing_new_df = fetch_existing_hopsworks_data(uploader, "aqi_clean_features_v2")
+    # 2. Fetch existing data from NEW feature group for lag/rolling features
+    logger.info("STEP 2: Fetching existing data from NEW feature group...")
+    existing_df = fetch_existing_hopsworks_data(uploader, "aqi_clean_features_v2")
     
     # 3. Collect Current Data (OpenWeather + IQAir AQI for comparison) - USING EXISTING INFRASTRUCTURE
     logger.info("STEP 3: Collecting current data (OpenWeather + IQAir AQI for comparison)...")
@@ -532,54 +477,41 @@ def run_hourly_update():
     validation_df.to_csv(validation_path, index=False)
     logger.info(f"Created new hourly AQI validation file: {validation_path}")
 
-    # 4. Create OLD features with historical context from OLD group
-    logger.info("\nSTEP 4: Creating OLD features with historical context from OLD group...")
-    old_features = create_old_features_with_context(raw_df, existing_old_df)
+    # 4. Create CLEAN features with historical context from NEW group
+    logger.info("\nSTEP 4: Creating CLEAN features with historical context from NEW group...")
+    clean_features = create_clean_features_with_context(raw_df, existing_df)
     
-    # 5. Create CLEAN features with historical context from NEW group
-    logger.info("\nSTEP 5: Creating CLEAN features with historical context from NEW group...")
-    clean_features = create_clean_features_with_context(raw_df, existing_new_df)
-    
-    if old_features is None or clean_features is None:
+    if clean_features is None:
         logger.error("Feature engineering failed")
         return False
 
-    # 6. Push to BOTH feature groups
-    logger.info("\nSTEP 6: Pushing to both feature groups...")
-    
-    # Push to OLD feature group
-    logger.info("Pushing to OLD feature group (multan_aqi_features_clean)...")
-    old_success = uploader.push_features(
-        df=old_features,
-        group_name="multan_aqi_features_clean",
-        description="PM2.5 prediction features for Multan (OLD GROUP - 127 features). Target: pm2_5 (raw concentration), AQI: us_aqi (calculated from PM2.5)."
-    )
+    # 5. Push to NEW feature group only
+    logger.info("\nSTEP 5: Pushing to NEW feature group only...")
     
     # Push to NEW feature group
     logger.info("Pushing to NEW feature group (aqi_clean_features_v2)...")
-    new_success = uploader.push_features(
+    success = uploader.push_features(
         df=clean_features,
         group_name="aqi_clean_features_v2",
-        description="Clean, optimized features for AQI prediction (NEW GROUP - 65 features). Target: pm2_5 (raw concentration), AQI: us_aqi (calculated from PM2.5)."
+        description="Clean, optimized features for AQI prediction (NEW GROUP - 87 features). Target: pm2_5 (raw concentration), AQI: us_aqi (calculated from PM2.5)."
     )
     
-    if old_success and new_success:
-        logger.info("✅ Successfully pushed data to BOTH feature groups!")
-        logger.info(f"📊 Old features: {len(old_features.columns)} columns")
-        logger.info(f"✨ Clean features: {len(clean_features.columns)} columns (64 expected)")
+    if success:
+        logger.info("✅ Successfully pushed data to NEW feature group!")
+        logger.info(f"✨ Clean features: {len(clean_features.columns)} columns (87 expected)")
         return True
     else:
-        logger.error("❌ Failed to push data to one or both feature groups!")
+        logger.error("❌ Failed to push data to NEW feature group!")
         return False
 
 def main():
     """
     Main function to run hourly data collection
     """
-    print("🚀 AQI Data Collection - Dual Feature Group Mode")
+    print("🚀 AQI Data Collection - NEW GROUP ONLY")
     print("=" * 60)
-    print("📊 Writing to BOTH old and new feature groups")
-    print("🔄 This is the transition period - monitoring both groups")
+    print("📊 Writing to NEW feature group only")
+    print("🔄 Old group deprecated - clean and optimized")
     print("=" * 60)
     
     # Run collection
@@ -588,10 +520,10 @@ def main():
     if success:
         print("🎉 Collection cycle completed!")
         print("📊 Next steps:")
-        print("   1. Monitor both feature groups for data quality")
+        print("   1. Monitor NEW feature group for data quality")
         print("   2. Validate clean features are working correctly")
-        print("   3. Test model performance with new features")
-        print("   4. Switch to new group only when validated")
+        print("   3. Test model performance with optimized features")
+        print("   4. Old group is deprecated - no longer used")
     else:
         print("❌ Collection cycle failed!")
     
