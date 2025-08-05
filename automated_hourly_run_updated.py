@@ -426,7 +426,7 @@ def run_hourly_update():
 
     # 2. Fetch existing data from NEW feature group for lag/rolling features
     logger.info("STEP 2: Fetching existing data from NEW feature group...")
-    existing_df = fetch_existing_hopsworks_data(uploader, "aqi_clean_features_v2")
+    existing_df = fetch_existing_hopsworks_data(uploader, HOPSWORKS_CONFIG['feature_group_name'])
     
     # 3. Collect Current Data (OpenWeather + IQAir AQI for comparison) - USING EXISTING INFRASTRUCTURE
     logger.info("STEP 3: Collecting current data (OpenWeather + IQAir AQI for comparison)...")
@@ -489,10 +489,10 @@ def run_hourly_update():
     logger.info("\nSTEP 5: Pushing to NEW feature group only...")
     
     # Push to NEW feature group
-    logger.info("Pushing to NEW feature group (aqi_clean_features_v2)...")
+    logger.info(f"Pushing to NEW feature group ({HOPSWORKS_CONFIG['feature_group_name']})...")
     success = uploader.push_features(
         df=clean_features,
-        group_name="aqi_clean_features_v2",
+        group_name=HOPSWORKS_CONFIG['feature_group_name'],
         description="Clean, optimized features for AQI prediction (NEW GROUP - 87 features). Target: pm2_5 (raw concentration), AQI: us_aqi (calculated from PM2.5)."
     )
     

@@ -56,7 +56,7 @@ PATHS = {
 HOPSWORKS_CONFIG = {
     "api_key": os.getenv("HOPSWORKS_API_KEY", ""),  # Will be empty if not set
     "project_name": "AQIMultan",  # Your actual Hopsworks project name
-    "feature_group_name": "multan_aqi_features_clean"  # Feature group name
+    "feature_group_name": "aqi_clean_features_v2"  # NEW feature group name (old group deprecated)
 }
 
 # IQAir API Configuration
