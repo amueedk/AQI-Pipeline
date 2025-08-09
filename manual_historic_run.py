@@ -221,8 +221,8 @@ def collect_historical_data_march_to_june_2025():
     logger.info("Collecting historical data for March 1, 2025 to June 15, 2025...")
     
     # Define date range: March 1, 2025 00:00 UTC to June 15, 2025 23:59 UTC
-    start_date = datetime(2025, 3, 1, 0, 0, 0, tzinfo=None)   # March 1, 2025 00:00
-    end_date = datetime(2025, 6, 15, 23, 59, 59, tzinfo=None)  # June 15, 2025 23:59
+    start_date = datetime(2025, 1, 1, 0, 0, 0, tzinfo=None)   # March 1, 2025 00:00
+    end_date = datetime(2025, 3, 7, 23, 59, 59, tzinfo=None)  # June 15, 2025 23:59
     
     # Convert to Unix timestamps
     start_unix = int(start_date.timestamp())
