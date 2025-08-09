@@ -1,0 +1,50 @@
+name: Hourly Weather Forecast Collector
+
+on:
+  workflow_dispatch:  # Manual trigger
+  repository_dispatch:  # External API trigger
+    types: [forecast-trigger]
+
+jobs:
+  forecast-collection:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10  # Shorter timeout for forecast collection
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Create necessary directories
+        run: |
+          mkdir -p logs
+          mkdir -p data
+
+      - name: Run automated forecast collector
+        run: |
+          python automated_forecast_collector.py
+        env:
+          HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
+          OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
+
+      - name: Upload logs and data on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forecast-logs-${{ github.run_number }}
+          path: |
+            logs/forecast_collector.log
+            logs/
+            data/
+          retention-days: 7 
