@@ -284,6 +284,9 @@ def push_forecast_data(uploader: HopsworksUploader, forecast_df: pd.DataFrame) -
         forecast_df['target_time'] = pd.to_datetime(forecast_df['target_time'])
         forecast_df['step_hour'] = forecast_df['step_hour'].astype(int)
         
+        # Add 'time' column for Hopsworks (required by push_features)
+        forecast_df['time'] = forecast_df['forecast_time']
+        
         # Create time_str for Hopsworks primary key
         forecast_df['forecast_time_str'] = forecast_df['forecast_time'].dt.strftime('%Y-%m-%d %H:%M:%S')
         
