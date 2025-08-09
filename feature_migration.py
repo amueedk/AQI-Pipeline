@@ -350,11 +350,56 @@ class HopsworksFeatureMigration:
         
         return rolling_series
     
+    def read_new_feature_group(self):
+        """
+        Read existing data from new feature group to check for duplicates
+        """
+        try:
+            new_fg = self.fs.get_feature_group("aqi_clean_features_v2", version=1)
+            new_data = new_fg.read()
+            print(f"✅ Read {len(new_data)} rows from new feature group")
+            return new_data
+        except Exception as e:
+            print(f"⚠️ Could not read new feature group (may not exist yet): {e}")
+            return pd.DataFrame()
+
+    def filter_new_data_only(self, old_data, new_data):
+        """
+        Filter old data to only include rows that don't exist in new data
+        """
+        if new_data.empty:
+            print("📊 No existing data in new group - will migrate all old data")
+            return old_data
+        
+        # Ensure both have time_str for comparison
+        if 'time_str' not in old_data.columns:
+            old_data['time_str'] = old_data.index.dt.floor('H').dt.strftime('%Y-%m-%d %H:%M:%S')
+        if 'time_str' not in new_data.columns:
+            new_data['time_str'] = new_data.index.dt.floor('H').dt.strftime('%Y-%m-%d %H:%M:%S')
+        
+        # Find timestamps that exist in new data
+        existing_timestamps = set(new_data['time_str'].dropna())
+        
+        # Filter old data to only include new timestamps
+        old_data_with_time = old_data.copy()
+        if 'time_str' not in old_data_with_time.columns:
+            old_data_with_time['time_str'] = old_data_with_time.index.dt.floor('H').dt.strftime('%Y-%m-%d %H:%M:%S')
+        
+        new_only_data = old_data_with_time[~old_data_with_time['time_str'].isin(existing_timestamps)]
+        
+        print(f"📊 Migration analysis:")
+        print(f"   Old data rows: {len(old_data)}")
+        print(f"   New data rows: {len(new_data)}")
+        print(f"   Existing timestamps in new: {len(existing_timestamps)}")
+        print(f"   New rows to migrate: {len(new_only_data)}")
+        
+        return new_only_data
+
     def migrate_historical_data(self):
         """
-        Complete migration process
+        Complete migration process - only migrates NEW data
         """
-        print("🚀 Starting historical data migration...")
+        print("🚀 Starting historical data migration (NEW DATA ONLY)...")
         
         # Check if connection was successful
         if self.fs is None:
@@ -366,18 +411,28 @@ class HopsworksFeatureMigration:
         if old_data is None:
             return None
         
-        # 2. Transform to clean features
-        clean_data = self.transform_to_clean_features(old_data)
+        # 2. Read existing new data to check for duplicates
+        new_data = self.read_new_feature_group()
         
-        # 3. Create new feature group
+        # 3. Filter to only new data
+        new_only_data = self.filter_new_data_only(old_data, new_data)
+        
+        if new_only_data.empty:
+            print("✅ No new data to migrate - all data already exists in new group")
+            return None
+        
+        # 4. Transform to clean features
+        clean_data = self.transform_to_clean_features(new_only_data)
+        
+        # 5. Create new feature group (if doesn't exist)
         new_fg = self.create_new_feature_group()
         if new_fg is None:
             return None
         
-        # 4. Store in new feature group
+        # 6. Store only new data in new feature group
         try:
             new_fg.insert(clean_data, write_options={"wait_for_job": True})
-            print(f"✅ Successfully migrated {len(clean_data)} rows to new feature group")
+            print(f"✅ Successfully migrated {len(clean_data)} NEW rows to new feature group")
             print(f"📊 Old features: {len(old_data.columns)} → New features: {len(clean_data.columns)}")
             print("✅ Feature group is online-enabled and data is committed!")
             
