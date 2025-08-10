@@ -61,8 +61,8 @@ class HopsworksFeatureMigration:
         Read old messy data from Hopsworks (consistent with existing feature group name)
         """
         try:
-            # Use the feature group name from config.py
-            old_fg = self.fs.get_feature_group("multan_aqi_features_clean", version=1)
+            # Read from the updated source feature group
+            old_fg = self.fs.get_feature_group("multan_aqi_features_clean_2", version=1)
             old_data = old_fg.read()
             print(f"✅ Read {len(old_data)} rows from old feature group")
             print(f"📊 Old features: {len(old_data.columns)} columns")
