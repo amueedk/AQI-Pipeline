@@ -259,7 +259,7 @@ def create_forecast_feature_group(uploader: HopsworksUploader) -> bool:
             name=FORECAST_CONFIG['feature_group_name'],
             version=1,
             description=FORECAST_CONFIG['description'],
-            primary_key=['step_hour'],  # Overwrite each hour per step
+            primary_key=['time_str'],  # Use time_str as the sole primary key
             event_time='forecast_time',
             online_enabled=True  # Enable online storage for fast inference
         )
@@ -287,7 +287,11 @@ def push_forecast_data(uploader: HopsworksUploader, forecast_df: pd.DataFrame) -
         # Add 'time' column for Hopsworks (required by push_features)
         forecast_df['time'] = forecast_df['forecast_time']
         
-        # no time_str used; primary key is step_hour only
+        # Primary key is time_str -> compose from forecast_time + step_hour
+        forecast_df['time_str'] = (
+            forecast_df['forecast_time'].dt.strftime('%Y-%m-%d %H:%M:%S')
+            + '_' + forecast_df['step_hour'].astype(str)
+        )
         
         # Push to feature group
         success = uploader.push_features(
@@ -363,12 +367,49 @@ def run_forecast_collection():
 
     # 3c. Merge on target_time/step_hour
     logger.info("STEP 3c: Merging weather + pollution forecasts...")
-    merged = pd.merge(
-        weather_df,
-        pollution_df[['step_hour', 'target_time', 'carbon_monoxide', 'ozone', 'sulphur_dioxide', 'nh3']],
-        on=['step_hour', 'target_time'], how='left'
+    # Use weather as anchor; align pollution times to the same hourly timestamps
+    wx = weather_df.copy()
+    pl = pollution_df.copy()
+
+    # Ensure proper dtypes
+    wx['target_time'] = pd.to_datetime(wx['target_time'], utc=True)
+    pl['target_time'] = pd.to_datetime(pl['target_time'], utc=True)
+    wx['step_hour'] = wx['step_hour'].astype(int)
+    pl['step_hour'] = pl['step_hour'].astype(int)
+
+    # Floor to the hour to remove minute/second drift
+    wx['tt_hr'] = wx['target_time'].dt.floor('H')
+    pl['tt_hr'] = pl['target_time'].dt.floor('H')
+
+    # Auto-detect consistent hour offset between pollution and weather (e.g., -1h)
+    try:
+        # Compare overlapping steps to find typical offset in hours
+        join_steps = sorted(set(wx['step_hour']).intersection(set(pl['step_hour'])))
+        if join_steps:
+            wx_sample = wx[wx['step_hour'].isin(join_steps)][['step_hour', 'tt_hr']].sort_values('step_hour')
+            pl_sample = pl[pl['step_hour'].isin(join_steps)][['step_hour', 'tt_hr']].sort_values('step_hour')
+            merged_steps = wx_sample.merge(pl_sample, on='step_hour', suffixes=('_wx', '_pl'))
+            diffs_hrs = (merged_steps['tt_hr_wx'] - merged_steps['tt_hr_pl']).dt.total_seconds() / 3600.0
+            # Use median rounded to nearest int for robustness
+            offset_hours = int(round(float(diffs_hrs.median()))) if len(diffs_hrs) > 0 else 0
+        else:
+            offset_hours = 0
+    except Exception:
+        offset_hours = 0
+
+    # Apply detected offset to pollution hours so they line up with weather
+    pl['tt_hr_adj'] = pl['tt_hr'] + pd.Timedelta(hours=offset_hours)
+
+    # Merge exactly on step and adjusted hour to avoid NaNs
+    merged = wx.merge(
+        pl[['step_hour', 'tt_hr_adj', 'carbon_monoxide', 'ozone', 'sulphur_dioxide', 'nh3']],
+        left_on=['step_hour', 'tt_hr'], right_on=['step_hour', 'tt_hr_adj'], how='left'
     )
-    # Keep only first N steps
+
+    # Cleanup temp columns and keep only the first N steps
+    drop_cols = [c for c in ['tt_hr', 'tt_hr_adj'] if c in merged.columns]
+    if drop_cols:
+        merged = merged.drop(columns=drop_cols)
     merged = merged.sort_values('step_hour').head(FORECAST_CONFIG['forecast_hours']).reset_index(drop=True)
 
     # 4. Format for decoder and direct LSTM (raw names included)
