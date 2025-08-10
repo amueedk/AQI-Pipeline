@@ -297,60 +297,29 @@ def push_forecast_data(uploader: HopsworksUploader, forecast_df: pd.DataFrame) -
             version=1
         )
 
-        # Pre-delete any overlapping keys (same window) to avoid duplicates in offline
+        # HARD RESET: delete ALL existing rows first
         try:
-            window_keys_df = pd.DataFrame({'time_str': forecast_df['time_str'].astype(str).unique()})
-            if not window_keys_df.empty:
-                logger.info(f"🧽 Pre-deleting {len(window_keys_df)} overlapping keys before insert...")
-                fg.delete_records(window_keys_df, write_options={"wait_for_job": True})
+            existing = fg.read()
+            if hasattr(existing, 'toPandas'):
+                existing = existing.toPandas()
+            if isinstance(existing, pd.DataFrame) and not existing.empty and 'time_str' in existing.columns:
+                to_delete_all = existing[['time_str']].drop_duplicates()
+                if not to_delete_all.empty:
+                    logger.info(f"🧨 Deleting ALL existing rows: {len(to_delete_all)}")
+                    fg.delete_records(to_delete_all, write_options={"wait_for_job": True})
         except Exception as e:
-            logger.warning(f"⚠️ Pre-delete step failed/unsupported: {e}")
+            logger.warning(f"⚠️ Full delete step skipped/failed: {e}")
 
         # Insert new 72 rows
         try:
             fg.insert(forecast_df, write_options={"wait_for_job": True})
             logger.info(f"✅ Inserted {len(forecast_df)} rows into '{FORECAST_CONFIG['feature_group_name']}'")
             logger.info(f"   Steps: {forecast_df['step_hour'].min()} to {forecast_df['step_hour'].max()}")
-            insert_ok = True
         except Exception as e:
             logger.error(f"❌ Insert failed: {e}")
-            insert_ok = False
-
-        if not insert_ok:
-            logger.error("❌ Failed to push forecast data")
             return False
 
-        # After successful insert, prune any rows outside the latest 72-hour window
-        try:
-            latest_keys = set(forecast_df['time_str'].astype(str).tolist())
-            existing = fg.read()
-            if hasattr(existing, 'toPandas'):
-                existing = existing.toPandas()
-            if isinstance(existing, pd.DataFrame) and not existing.empty:
-                if 'time_str' not in existing.columns:
-                    logger.warning("⚠️ Cannot prune: 'time_str' column not found in feature group read result")
-                else:
-                    existing['time_str'] = existing['time_str'].astype(str)
-                    to_delete = existing[~existing['time_str'].isin(latest_keys)][['time_str']]
-                    if not to_delete.empty:
-                        logger.info(f"🧹 Pruning {len(to_delete)} stale rows outside the latest window...")
-                        try:
-                            fg.delete_records(to_delete, write_options={"wait_for_job": True})
-                            logger.info("✅ Pruned stale rows successfully")
-                        except Exception as e:
-                            logger.warning(f"⚠️ Batch delete failed ({e}); attempting chunked deletes...")
-                            time_str_list = to_delete['time_str'].astype(str).tolist()
-                            if time_str_list:
-                                chunk_size = 500
-                                for i in range(0, len(time_str_list), chunk_size):
-                                    chunk = pd.DataFrame({'time_str': time_str_list[i:i+chunk_size]})
-                                    try:
-                                        fg.delete_records(chunk, write_options={"wait_for_job": True})
-                                    except Exception as ee:
-                                        logger.warning(f"⚠️ Failed deleting a chunk of {len(chunk)} rows: {ee}")
-        except Exception as e:
-            logger.warning(f"⚠️ Prune step skipped due to error: {e}")
-
+        # No prune needed after hard reset
         return True
 
     except Exception as e:
