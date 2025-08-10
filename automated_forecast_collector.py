@@ -260,6 +260,7 @@ def create_forecast_feature_group(uploader: HopsworksUploader) -> bool:
             version=1,
             description=FORECAST_CONFIG['description'],
             primary_key=['step_hour'],  # Overwrite each hour per step
+            event_time='forecast_time',
             online_enabled=True  # Enable online storage for fast inference
         )
         
