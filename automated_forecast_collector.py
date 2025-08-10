@@ -246,27 +246,36 @@ def format_forecast_for_decoder(forecast_df: pd.DataFrame) -> pd.DataFrame:
     return result_df
 
 @retry_on_hopsworks_error()
-def create_forecast_feature_group(uploader: HopsworksUploader) -> bool:
+def recreate_forecast_feature_group(uploader: HopsworksUploader) -> bool:
     """
-    Create the forecast feature group if it doesn't exist
+    Drop and recreate the forecast feature group (online + offline) fresh each run.
+    Ensures only the latest 72 rows will exist after insert.
     """
     try:
-        logger.info(f"🏗️ Creating forecast feature group: {FORECAST_CONFIG['feature_group_name']}")
-        
-        fg = uploader.fs.get_or_create_feature_group(
-            name=FORECAST_CONFIG['feature_group_name'],
+        name = FORECAST_CONFIG['feature_group_name']
+        logger.info(f"🏗️ Recreating forecast feature group: {name}")
+
+        # If exists, delete first
+        try:
+            existing_fg = uploader.fs.get_feature_group(name=name, version=1)
+            logger.info("🧨 Deleting existing feature group (v1)...")
+            existing_fg.delete()
+        except Exception:
+            logger.info("ℹ️ No existing v1 feature group to delete (or delete not required)")
+
+        # Create fresh FG (schema inferred on first insert)
+        uploader.fs.create_feature_group(
+            name=name,
             version=1,
             description=FORECAST_CONFIG['description'],
-            primary_key=['time_str'],  # Use time_str as the sole primary key
+            primary_key=['time_str'],
             event_time='time',
-            online_enabled=True  # Enable online storage for fast inference
+            online_enabled=True
         )
-        
-        logger.info(f"✅ Forecast feature group created/verified")
+        logger.info("✅ Forecast feature group recreated")
         return True
-        
     except Exception as e:
-        logger.error(f"❌ Failed to create forecast feature group: {e}")
+        logger.error(f"❌ Failed to recreate forecast feature group: {e}")
         return False
 
 @retry_on_hopsworks_error()
@@ -291,35 +300,16 @@ def push_forecast_data(uploader: HopsworksUploader, forecast_df: pd.DataFrame) -
         if 'forecast_time' in forecast_df.columns:
             forecast_df = forecast_df.drop(columns=['forecast_time'])
 
-        # Use direct FG operations with write_options to enforce jobs in offline store
+        # Direct insert into freshly recreated FG
         fg = uploader.fs.get_feature_group(
             name=FORECAST_CONFIG['feature_group_name'],
             version=1
         )
 
-        # HARD RESET: delete ALL existing rows first
-        try:
-            existing = fg.read()
-            if hasattr(existing, 'toPandas'):
-                existing = existing.toPandas()
-            if isinstance(existing, pd.DataFrame) and not existing.empty and 'time_str' in existing.columns:
-                to_delete_all = existing[['time_str']].drop_duplicates()
-                if not to_delete_all.empty:
-                    logger.info(f"🧨 Deleting ALL existing rows: {len(to_delete_all)}")
-                    fg.delete_records(to_delete_all, write_options={"wait_for_job": True})
-        except Exception as e:
-            logger.warning(f"⚠️ Full delete step skipped/failed: {e}")
+        fg.insert(forecast_df, write_options={"wait_for_job": True})
+        logger.info(f"✅ Inserted {len(forecast_df)} rows into '{FORECAST_CONFIG['feature_group_name']}'")
+        logger.info(f"   Steps: {forecast_df['step_hour'].min()} to {forecast_df['step_hour'].max()}")
 
-        # Insert new 72 rows
-        try:
-            fg.insert(forecast_df, write_options={"wait_for_job": True})
-            logger.info(f"✅ Inserted {len(forecast_df)} rows into '{FORECAST_CONFIG['feature_group_name']}'")
-            logger.info(f"   Steps: {forecast_df['step_hour'].min()} to {forecast_df['step_hour'].max()}")
-        except Exception as e:
-            logger.error(f"❌ Insert failed: {e}")
-            return False
-
-        # No prune needed after hard reset
         return True
 
     except Exception as e:
@@ -356,9 +346,9 @@ def run_forecast_collection():
         logger.error("❌ Failed to connect to Hopsworks")
         return False
     
-    # 2. Create forecast feature group
-    logger.info("STEP 2: Creating forecast feature group...")
-    if not create_forecast_feature_group(uploader):
+    # 2. Recreate forecast feature group
+    logger.info("STEP 2: Recreating forecast feature group...")
+    if not recreate_forecast_feature_group(uploader):
         logger.error("❌ Failed to create forecast feature group")
         return False
     
