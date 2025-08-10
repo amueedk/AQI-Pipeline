@@ -1,7 +1,7 @@
 """
 Manual Historic Data Run (CSV + Hopsworks Version)
 --------------------------------------------------
-This script collects historical data for June 16-30, 2025 and saves to CSV AND Hopsworks.
+This script collects historical data for March 1, 2025 to August 10, 2025 and saves to CSV AND Hopsworks.
 
 Uses EXACT same feature engineering and Hopsworks integration as automated_hourly_run.py:
 - Same AQIFeatureEngineer class and logic
@@ -214,15 +214,15 @@ def fetch_historic_pollution_batch(start_unix, end_unix, max_records_per_call=24
 
 def collect_historical_data_march_to_june_2025():
     """
-    Collect historical data for March 1, 2025 to June 15, 2025 with timestamp matching.
+    Collect historical data for March 1, 2025 to August 10, 2025 with timestamp matching.
     Uses multiple API calls to work around record limits.
     Returns DataFrame with matched weather and pollution data.
     """
-    logger.info("Collecting historical data for March 1, 2025 to June 15, 2025...")
+    logger.info("Collecting historical data for March 1, 2025 to August 10, 2025...")
     
-    # Define date range: March 1, 2025 00:00 UTC to June 15, 2025 23:59 UTC
+    # Define date range: March 1, 2025 00:00 UTC to August 10, 2025 23:59 UTC
     start_date = datetime(2025, 3, 1, 0, 0, 0, tzinfo=None)   # March 1, 2025 00:00
-    end_date = datetime(2025, 3, 7, 23, 59, 59, tzinfo=None)  # June 15, 2025 23:59
+    end_date = datetime(2025, 8, 10, 23, 59, 59, tzinfo=None)  # August 10, 2025 23:59
     
     # Convert to Unix timestamps
     start_unix = int(start_date.timestamp())
@@ -318,7 +318,7 @@ def run_manual_backfill_csv_and_hopsworks():
         return False
 
     # 2. Collect Historical Data
-    logger.info("STEP 2: Collecting historical data for March 1, 2025 to June 15, 2025...")
+    logger.info("STEP 2: Collecting historical data for March 1, 2025 to August 10, 2025...")
     raw_df = collect_historical_data_march_to_june_2025()
     if raw_df.empty:
         logger.error("Data collection failed. No data to process. Aborting.")
@@ -326,7 +326,7 @@ def run_manual_backfill_csv_and_hopsworks():
     logger.info(f"Successfully collected {len(raw_df)} records.")
 
     # Save raw data as CSV for reference
-    raw_data_path = "data/raw_historical_data_march1_june15_2025.csv"
+    raw_data_path = "data/raw_historical_data_march1_aug10_2025.csv"
     os.makedirs("data", exist_ok=True)
     raw_df.to_csv(raw_data_path, index=False)
     logger.info(f"Raw data saved to {raw_data_path}")
@@ -360,7 +360,7 @@ def run_manual_backfill_csv_and_hopsworks():
 
     # 4. Save to CSV
     logger.info("\nSTEP 4: Saving engineered features to CSV...")
-    engineered_data_path = "data/engineered_features_march1_june15_2025.csv"
+    engineered_data_path = "data/engineered_features_march1_aug10_2025.csv"
     engineered_df.to_csv(engineered_data_path, index=False)
     
     logger.info(f"Engineered features saved to {engineered_data_path}")
@@ -385,7 +385,7 @@ def run_manual_backfill_csv_and_hopsworks():
         logger.info("✓ Added CSV files to git staging")
         
         # Commit with descriptive message
-        commit_message = f"Add historical data for March 1-June 15, 2025 ({len(engineered_df)} records)"
+        commit_message = f"Add historical data for March 1-Aug 10, 2025 ({len(engineered_df)} records)"
         subprocess.run(["git", "commit", "-m", commit_message], check=True)
         logger.info(f"✓ Committed CSV files: {commit_message}")
         
@@ -459,8 +459,8 @@ def run_manual_backfill_csv_and_hopsworks():
     try:
         success = uploader.push_features(
             df=engineered_df,
-            group_name='multan_aqi_features_clean',
-            description="Historical backfill of PM2.5 and PM10 prediction features for Multan (March 1-June 15, 2025). Targets: pm2_5, pm10 (raw concentrations), Reference: us_aqi (final AQI)."
+            group_name='multan_aqi_features_clean_2',
+            description="Historical backfill of PM2.5 and PM10 prediction features for Multan (March 1-Aug 10, 2025). Targets: pm2_5, pm10 (raw concentrations), Reference: us_aqi (final AQI)."
         )
     finally:
         # Restore original method
