@@ -261,7 +261,8 @@ def create_forecast_feature_group(uploader: HopsworksUploader) -> bool:
             description=FORECAST_CONFIG['description'],
             primary_key=['step_hour'],  # Overwrite each hour per step
             event_time='forecast_time',
-            online_enabled=True  # Enable online storage for fast inference
+            online_enabled=True,  # Enable online storage for fast inference
+            time_travel_format=None  # Prevent time_str from being added to PK
         )
         
         logger.info(f"✅ Forecast feature group created/verified")
