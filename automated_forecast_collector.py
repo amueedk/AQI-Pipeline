@@ -300,10 +300,14 @@ def push_forecast_data(uploader: HopsworksUploader, forecast_df: pd.DataFrame) -
         if 'forecast_time' in forecast_df.columns:
             forecast_df = forecast_df.drop(columns=['forecast_time'])
 
-        # Direct insert into freshly recreated FG
-        fg = uploader.fs.get_feature_group(
+        # Direct insert into freshly recreated FG (ensure object via get_or_create)
+        fg = uploader.fs.get_or_create_feature_group(
             name=FORECAST_CONFIG['feature_group_name'],
-            version=1
+            version=1,
+            description=FORECAST_CONFIG['description'],
+            primary_key=['time_str'],
+            event_time='time',
+            online_enabled=True
         )
 
         fg.insert(forecast_df, write_options={"wait_for_job": True})
