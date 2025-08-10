@@ -302,6 +302,42 @@ def push_forecast_data(uploader: HopsworksUploader, forecast_df: pd.DataFrame) -
             logger.info(f"✅ Successfully pushed forecast data to Hopsworks")
             logger.info(f"   Records: {len(forecast_df)}")
             logger.info(f"   Steps: {forecast_df['step_hour'].min()} to {forecast_df['step_hour'].max()}")
+
+            # After successful push, prune any rows outside the latest 72-hour window
+            try:
+                latest_keys = set(forecast_df['time_str'].astype(str).tolist())
+                fg = uploader.fs.get_feature_group(
+                    name=FORECAST_CONFIG['feature_group_name'],
+                    version=1
+                )
+                existing = fg.read()
+                if hasattr(existing, 'toPandas'):
+                    existing = existing.toPandas()
+                if isinstance(existing, pd.DataFrame) and not existing.empty:
+                    if 'time_str' not in existing.columns:
+                        logger.warning("⚠️ Cannot prune: 'time_str' column not found in feature group read result")
+                    else:
+                        existing['time_str'] = existing['time_str'].astype(str)
+                        to_delete = existing[~existing['time_str'].isin(latest_keys)][['time_str']]
+                        if not to_delete.empty:
+                            logger.info(f"🧹 Pruning {len(to_delete)} stale rows outside the latest window...")
+                            try:
+                                fg.delete_records(to_delete)
+                                logger.info("✅ Pruned stale rows successfully")
+                            except Exception as e:
+                                logger.warning(f"⚠️ Batch delete failed ({e}); attempting chunked deletes...")
+                                # Fallback: chunked deletes to avoid size/time limits
+                                time_str_list = to_delete['time_str'].astype(str).tolist()
+                                if time_str_list:
+                                    chunk_size = 500
+                                    for i in range(0, len(time_str_list), chunk_size):
+                                        chunk = pd.DataFrame({'time_str': time_str_list[i:i+chunk_size]})
+                                        try:
+                                            fg.delete_records(chunk)
+                                        except Exception as ee:
+                                            logger.warning(f"⚠️ Failed deleting a chunk of {len(chunk)} rows: {ee}")
+            except Exception as e:
+                logger.warning(f"⚠️ Prune step skipped due to error: {e}")
             return True
         else:
             logger.error(f"❌ Failed to push forecast data")
