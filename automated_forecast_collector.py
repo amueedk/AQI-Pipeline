@@ -260,8 +260,9 @@ def create_forecast_feature_group(uploader: HopsworksUploader) -> bool:
             version=1,
             description=FORECAST_CONFIG['description'],
             primary_key=['step_hour'],  # Overwrite each hour per step
-            event_time='forecast_time',
+            event_time=None,
             online_enabled=True,  # Enable online storage for fast inference
+            offline_enabled=False,  # Disable offline store to avoid Hudi/time_str
             time_travel_format=None  # Prevent time_str from being added to PK
         )
         
@@ -288,8 +289,7 @@ def push_forecast_data(uploader: HopsworksUploader, forecast_df: pd.DataFrame) -
         # Add 'time' column for Hopsworks (required by push_features)
         forecast_df['time'] = forecast_df['forecast_time']
         
-        # Create time_str using step_hour as primary key (to match our intended PK)
-        forecast_df['time_str'] = forecast_df['step_hour'].astype(str)
+        # no time_str used; primary key is step_hour only
         
         # Push to feature group
         success = uploader.push_features(
