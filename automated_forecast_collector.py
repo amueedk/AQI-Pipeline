@@ -94,9 +94,8 @@ def fetch_openweather_forecast(hours: int = 72) -> pd.DataFrame:
             
             # Create record
             record = {
-                'forecast_time': current_time,  # When forecast was made
                 'step_hour': step_hour,  # Forecast horizon (1, 2, 3, ..., 72)
-                'target_time': forecast_time,  # When this forecast is for
+                'target_time': forecast_time,  # API's dt (forecasted hour)
                 'temperature': main.get('temp'),
                 'humidity': main.get('humidity'),
                 'pressure': main.get('pressure'),
@@ -206,7 +205,6 @@ def fetch_openweather_pollution_forecast(hours: int = 72) -> pd.DataFrame:
         for i, item in enumerate(lst[:hours]):
             comp = item.get('components', {})
             rec = {
-                'forecast_time': current_time,
                 'step_hour': i + 1,
                 'target_time': pd.to_datetime(item.get('dt'), unit='s', utc=True),
                 'carbon_monoxide': comp.get('co'),
@@ -237,7 +235,7 @@ def format_forecast_for_decoder(forecast_df: pd.DataFrame) -> pd.DataFrame:
         'month_sin', 'month_cos', 'day_of_week_sin', 'day_of_week_cos',
         'carbon_monoxide', 'ozone', 'sulphur_dioxide', 'nh3',
     ]
-    base_columns = ['forecast_time', 'step_hour', 'target_time']
+    base_columns = ['step_hour', 'target_time']
     existing = [c for c in raw_keep if c in df.columns]
     cols = base_columns + existing
     result_df = df[cols].copy()
@@ -260,7 +258,7 @@ def create_forecast_feature_group(uploader: HopsworksUploader) -> bool:
             version=1,
             description=FORECAST_CONFIG['description'],
             primary_key=['time_str'],  # Use time_str as the sole primary key
-            event_time='forecast_time',
+            event_time='time',
             online_enabled=True  # Enable online storage for fast inference
         )
         
@@ -280,18 +278,18 @@ def push_forecast_data(uploader: HopsworksUploader, forecast_df: pd.DataFrame) -
         logger.info(f"📤 Pushing {len(forecast_df)} forecast records to Hopsworks...")
         
         # Ensure proper data types
-        forecast_df['forecast_time'] = pd.to_datetime(forecast_df['forecast_time'])
         forecast_df['target_time'] = pd.to_datetime(forecast_df['target_time'])
         forecast_df['step_hour'] = forecast_df['step_hour'].astype(int)
         
-        # Add 'time' column for Hopsworks (required by push_features)
-        forecast_df['time'] = forecast_df['forecast_time']
+        # Set time to API's dt (the forecasted hour)
+        forecast_df['time'] = forecast_df['target_time']
         
-        # Primary key is time_str -> compose from forecast_time + step_hour
-        forecast_df['time_str'] = (
-            forecast_df['forecast_time'].dt.strftime('%Y-%m-%d %H:%M:%S')
-            + '_' + forecast_df['step_hour'].astype(str)
-        )
+        # Primary key is time_str -> floor to hour and format
+        forecast_df['time_str'] = forecast_df['time'].dt.floor('H').dt.strftime('%Y-%m-%d %H:%M:%S')
+
+        # Drop forecast_time if present
+        if 'forecast_time' in forecast_df.columns:
+            forecast_df = forecast_df.drop(columns=['forecast_time'])
         
         # Push to feature group
         success = uploader.push_features(
