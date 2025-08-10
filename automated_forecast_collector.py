@@ -276,73 +276,83 @@ def push_forecast_data(uploader: HopsworksUploader, forecast_df: pd.DataFrame) -
     """
     try:
         logger.info(f"📤 Pushing {len(forecast_df)} forecast records to Hopsworks...")
-        
+
         # Ensure proper data types
         forecast_df['target_time'] = pd.to_datetime(forecast_df['target_time'])
         forecast_df['step_hour'] = forecast_df['step_hour'].astype(int)
-        
+
         # Set time to API's dt (the forecasted hour)
         forecast_df['time'] = forecast_df['target_time']
-        
+
         # Primary key is time_str -> floor to hour and format
         forecast_df['time_str'] = forecast_df['time'].dt.floor('H').dt.strftime('%Y-%m-%d %H:%M:%S')
 
         # Drop forecast_time if present
         if 'forecast_time' in forecast_df.columns:
             forecast_df = forecast_df.drop(columns=['forecast_time'])
-        
-        # Push to feature group
-        success = uploader.push_features(
-            df=forecast_df,
-            group_name=FORECAST_CONFIG['feature_group_name'],
-            description=FORECAST_CONFIG['description']
-        )
-        
-        if success:
-            logger.info(f"✅ Successfully pushed forecast data to Hopsworks")
-            logger.info(f"   Records: {len(forecast_df)}")
-            logger.info(f"   Steps: {forecast_df['step_hour'].min()} to {forecast_df['step_hour'].max()}")
 
-            # After successful push, prune any rows outside the latest 72-hour window
-            try:
-                latest_keys = set(forecast_df['time_str'].astype(str).tolist())
-                fg = uploader.fs.get_feature_group(
-                    name=FORECAST_CONFIG['feature_group_name'],
-                    version=1
-                )
-                existing = fg.read()
-                if hasattr(existing, 'toPandas'):
-                    existing = existing.toPandas()
-                if isinstance(existing, pd.DataFrame) and not existing.empty:
-                    if 'time_str' not in existing.columns:
-                        logger.warning("⚠️ Cannot prune: 'time_str' column not found in feature group read result")
-                    else:
-                        existing['time_str'] = existing['time_str'].astype(str)
-                        to_delete = existing[~existing['time_str'].isin(latest_keys)][['time_str']]
-                        if not to_delete.empty:
-                            logger.info(f"🧹 Pruning {len(to_delete)} stale rows outside the latest window...")
-                            try:
-                                fg.delete_records(to_delete)
-                                logger.info("✅ Pruned stale rows successfully")
-                            except Exception as e:
-                                logger.warning(f"⚠️ Batch delete failed ({e}); attempting chunked deletes...")
-                                # Fallback: chunked deletes to avoid size/time limits
-                                time_str_list = to_delete['time_str'].astype(str).tolist()
-                                if time_str_list:
-                                    chunk_size = 500
-                                    for i in range(0, len(time_str_list), chunk_size):
-                                        chunk = pd.DataFrame({'time_str': time_str_list[i:i+chunk_size]})
-                                        try:
-                                            fg.delete_records(chunk)
-                                        except Exception as ee:
-                                            logger.warning(f"⚠️ Failed deleting a chunk of {len(chunk)} rows: {ee}")
-            except Exception as e:
-                logger.warning(f"⚠️ Prune step skipped due to error: {e}")
-            return True
-        else:
-            logger.error(f"❌ Failed to push forecast data")
+        # Use direct FG operations with write_options to enforce jobs in offline store
+        fg = uploader.fs.get_feature_group(
+            name=FORECAST_CONFIG['feature_group_name'],
+            version=1
+        )
+
+        # Pre-delete any overlapping keys (same window) to avoid duplicates in offline
+        try:
+            window_keys_df = pd.DataFrame({'time_str': forecast_df['time_str'].astype(str).unique()})
+            if not window_keys_df.empty:
+                logger.info(f"🧽 Pre-deleting {len(window_keys_df)} overlapping keys before insert...")
+                fg.delete_records(window_keys_df, write_options={"wait_for_job": True})
+        except Exception as e:
+            logger.warning(f"⚠️ Pre-delete step failed/unsupported: {e}")
+
+        # Insert new 72 rows
+        try:
+            fg.insert(forecast_df, write_options={"wait_for_job": True})
+            logger.info(f"✅ Inserted {len(forecast_df)} rows into '{FORECAST_CONFIG['feature_group_name']}'")
+            logger.info(f"   Steps: {forecast_df['step_hour'].min()} to {forecast_df['step_hour'].max()}")
+            insert_ok = True
+        except Exception as e:
+            logger.error(f"❌ Insert failed: {e}")
+            insert_ok = False
+
+        if not insert_ok:
+            logger.error("❌ Failed to push forecast data")
             return False
-            
+
+        # After successful insert, prune any rows outside the latest 72-hour window
+        try:
+            latest_keys = set(forecast_df['time_str'].astype(str).tolist())
+            existing = fg.read()
+            if hasattr(existing, 'toPandas'):
+                existing = existing.toPandas()
+            if isinstance(existing, pd.DataFrame) and not existing.empty:
+                if 'time_str' not in existing.columns:
+                    logger.warning("⚠️ Cannot prune: 'time_str' column not found in feature group read result")
+                else:
+                    existing['time_str'] = existing['time_str'].astype(str)
+                    to_delete = existing[~existing['time_str'].isin(latest_keys)][['time_str']]
+                    if not to_delete.empty:
+                        logger.info(f"🧹 Pruning {len(to_delete)} stale rows outside the latest window...")
+                        try:
+                            fg.delete_records(to_delete, write_options={"wait_for_job": True})
+                            logger.info("✅ Pruned stale rows successfully")
+                        except Exception as e:
+                            logger.warning(f"⚠️ Batch delete failed ({e}); attempting chunked deletes...")
+                            time_str_list = to_delete['time_str'].astype(str).tolist()
+                            if time_str_list:
+                                chunk_size = 500
+                                for i in range(0, len(time_str_list), chunk_size):
+                                    chunk = pd.DataFrame({'time_str': time_str_list[i:i+chunk_size]})
+                                    try:
+                                        fg.delete_records(chunk, write_options={"wait_for_job": True})
+                                    except Exception as ee:
+                                        logger.warning(f"⚠️ Failed deleting a chunk of {len(chunk)} rows: {ee}")
+        except Exception as e:
+            logger.warning(f"⚠️ Prune step skipped due to error: {e}")
+
+        return True
+
     except Exception as e:
         logger.error(f"❌ Error pushing forecast data: {e}")
         return False
