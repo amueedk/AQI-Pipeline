@@ -287,8 +287,8 @@ def push_forecast_data(uploader: HopsworksUploader, forecast_df: pd.DataFrame) -
         # Add 'time' column for Hopsworks (required by push_features)
         forecast_df['time'] = forecast_df['forecast_time']
         
-        # Create time_str for Hopsworks primary key
-        forecast_df['forecast_time_str'] = forecast_df['forecast_time'].dt.strftime('%Y-%m-%d %H:%M:%S')
+        # Create time_str using step_hour as primary key (to match our intended PK)
+        forecast_df['time_str'] = forecast_df['step_hour'].astype(str)
         
         # Push to feature group
         success = uploader.push_features(
