@@ -246,36 +246,23 @@ def format_forecast_for_decoder(forecast_df: pd.DataFrame) -> pd.DataFrame:
     return result_df
 
 @retry_on_hopsworks_error()
-def recreate_forecast_feature_group(uploader: HopsworksUploader) -> bool:
-    """
-    Drop and recreate the forecast feature group (online + offline) fresh each run.
-    Ensures only the latest 72 rows will exist after insert.
-    """
+def ensure_forecast_feature_group(uploader: HopsworksUploader) -> bool:
+    """Ensure the forecast feature group exists (no delete)."""
     try:
         name = FORECAST_CONFIG['feature_group_name']
-        logger.info(f"🏗️ Recreating forecast feature group: {name}")
-
-        # If exists, delete first
-        try:
-            existing_fg = uploader.fs.get_feature_group(name=name, version=1)
-            logger.info("🧨 Deleting existing feature group (v1)...")
-            existing_fg.delete()
-        except Exception:
-            logger.info("ℹ️ No existing v1 feature group to delete (or delete not required)")
-
-        # Create fresh FG (schema inferred on first insert)
-        uploader.fs.create_feature_group(
+        logger.info(f"🏗️ Ensuring forecast feature group exists: {name}")
+        _ = uploader.fs.get_or_create_feature_group(
             name=name,
             version=1,
             description=FORECAST_CONFIG['description'],
             primary_key=['time_str'],
             event_time='time',
-            online_enabled=True
+            online_enabled=True,
         )
-        logger.info("✅ Forecast feature group recreated")
+        logger.info("✅ Forecast feature group ready")
         return True
     except Exception as e:
-        logger.error(f"❌ Failed to recreate forecast feature group: {e}")
+        logger.error(f"❌ Failed to ensure forecast feature group: {e}")
         return False
 
 @retry_on_hopsworks_error()
@@ -350,10 +337,10 @@ def run_forecast_collection():
         logger.error("❌ Failed to connect to Hopsworks")
         return False
     
-    # 2. Recreate forecast feature group
-    logger.info("STEP 2: Recreating forecast feature group...")
-    if not recreate_forecast_feature_group(uploader):
-        logger.error("❌ Failed to create forecast feature group")
+    # 2. Ensure forecast feature group (no drop)
+    logger.info("STEP 2: Ensuring forecast feature group...")
+    if not ensure_forecast_feature_group(uploader):
+        logger.error("❌ Failed to prepare forecast feature group")
         return False
     
     # 3. Fetch weather forecasts
