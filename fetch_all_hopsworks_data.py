@@ -63,7 +63,7 @@ def fetch_all_hopsworks_data():
     # Get the feature group
     try:
         fg = fs.get_or_create_feature_group(
-            name=HOPSWORKS_CONFIG['feature_group_name'],
+            name='multan_aqi_features_clean_2',
             version=1
         )
         logger.info("✓ Feature group accessed")
