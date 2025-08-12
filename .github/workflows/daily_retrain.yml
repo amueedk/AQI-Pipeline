@@ -1,0 +1,54 @@
+name: Daily Retrain
+
+on:
+  workflow_dispatch: {}
+  repository_dispatch:
+    types: [retrain-trigger]
+
+jobs:
+  retrain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          # Training/runtime deps for LSTM
+          pip install "tensorflow==2.15.*" "scikit-learn==1.6.*" lightgbm fastapi uvicorn
+
+      - name: Create necessary directories
+        run: |
+          mkdir -p logs
+          mkdir -p data
+          mkdir -p temp
+
+      - name: Retrain banded models and register
+        env:
+          HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
+          REGISTER_TO_HOPSWORKS: '1'
+        run: |
+          python lstm_direct_multi_horizon_v1.py
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: retrain-logs-${{ github.run_number }}
+          path: |
+            logs/
+            temp/
+          retention-days: 7
+
+
