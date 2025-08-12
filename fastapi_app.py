@@ -69,6 +69,8 @@ def aqi_piecewise(pm: float, breakpoints: List[List[float]]) -> int:
 
 
 def pm25_to_aqi(pm25: float) -> int:
+    if not np.isfinite(pm25):
+        return 0
     c = round(pm25 * 10) / 10.0
     bps = [
         [0.0, 12.0, 0, 50],
@@ -83,6 +85,8 @@ def pm25_to_aqi(pm25: float) -> int:
 
 
 def pm10_to_aqi(pm10: float) -> int:
+    if not np.isfinite(pm10):
+        return 0
     c = float(int(round(pm10)))
     bps = [
         [0.0, 54.0, 0, 50],
@@ -172,6 +176,8 @@ def scale_encoder(enc_df: pd.DataFrame, enc_features: List[str], scalers: Dict[s
         grp = X[:, idx]
         Xs[:, idx] = scalers[key].transform(grp)
     apply(pm_idx, 'pm'); apply(w_idx, 'weather'); apply(pol_idx, 'pollutant'); apply(inter_idx, 'interaction')
+    # Safety: replace any non-finite values that may arise from scaling edge cases
+    Xs = np.nan_to_num(Xs, nan=0.0, posinf=0.0, neginf=0.0)
     return Xs[None, :, :]
 
 
@@ -188,7 +194,10 @@ def build_aux(fc_df: pd.DataFrame, steps: int, templates: List[str], scalers: Di
             w_scaled = ws.transform(w_vals)
     except Exception:
         w_scaled = ws.transform(w_vals)
+    # Safety: replace any non-finite values
+    w_scaled = np.nan_to_num(w_scaled, nan=0.0, posinf=0.0, neginf=0.0)
     p_scaled = scalers['pollutant'].transform(fc_df[p_cols].values.astype(np.float32))
+    p_scaled = np.nan_to_num(p_scaled, nan=0.0, posinf=0.0, neginf=0.0)
     by_name = {
         'temperature_scaled': w_scaled[:, 0], 'humidity_scaled': w_scaled[:, 1], 'pressure_scaled': w_scaled[:, 2], 'wind_speed_scaled': w_scaled[:, 3],
         'wind_direction_sin': fc_df['wind_direction_sin'].values.astype(np.float32), 'wind_direction_cos': fc_df['wind_direction_cos'].values.astype(np.float32),
@@ -208,6 +217,8 @@ def build_aux(fc_df: pd.DataFrame, steps: int, templates: List[str], scalers: Di
     for i in range(steps):
         row = [by_name[c][i] for c in cols]
         hexo[i, :] = np.array(row, dtype=np.float32)
+    # Safety: replace any non-finite values in auxiliary tensor
+    hexo = np.nan_to_num(hexo, nan=0.0, posinf=0.0, neginf=0.0)
     h = np.arange(1, steps + 1, dtype=np.float32); ang = 2.0 * np.pi * (h / float(steps)); pos = np.stack([np.sin(ang), np.cos(ang)], axis=1)
     pm0_rep = np.repeat(pm0_scaled[None, :], repeats=steps, axis=0)
     return np.concatenate([hexo, pos.astype(np.float32), pm0_rep.astype(np.float32)], axis=1)[None, :, :]
@@ -321,6 +332,9 @@ def predict():
         # Merge outputs: first steps_s from short, rest from mid
         pm25 = y_s[:, 0].tolist() + y_m[steps_s:, 0].tolist()
         pm10 = y_s[:, 1].tolist() + y_m[steps_s:, 1].tolist()
+        # Safety: sanitize any non-finite predictions before AQI computation
+        pm25 = [float(v) if np.isfinite(v) else 0.0 for v in pm25]
+        pm10 = [float(v) if np.isfinite(v) else 0.0 for v in pm10]
         aqi_pm25 = [pm25_to_aqi(v) for v in pm25]
         aqi_pm10 = [pm10_to_aqi(v) for v in pm10]
         aqi = [int(max(a, b)) for a, b in zip(aqi_pm25, aqi_pm10)]
