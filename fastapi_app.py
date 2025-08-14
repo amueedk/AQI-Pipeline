@@ -16,6 +16,7 @@ Env:
 """
 
 import os
+os.environ.setdefault("KERAS_BACKEND", "tensorflow")
 import json
 import logging
 from typing import Dict, List
@@ -24,6 +25,7 @@ import numpy as np
 import pandas as pd
 import joblib
 import tensorflow as tf
+import keras
 import hopsworks
 import requests
 
@@ -240,7 +242,31 @@ def load_bundle(model_name: str, local_root: str) -> Dict:
     with open(os.path.join(local_dir, f"{model_name}_features.json"), 'r') as f:
         feats = json.load(f)
     scalers = joblib.load(os.path.join(local_dir, f"{model_name}_scalers.pkl"))
-    model = tf.keras.models.load_model(os.path.join(local_dir, f"{model_name}.keras"), compile=False)
+    model_path = os.path.join(local_dir, f"{model_name}.keras")
+    # Prefer Keras 3 loader for .keras artifacts; fallback to tf.keras, with custom_objects guard
+    custom_objects = {
+        'Orthogonal': tf.keras.initializers.Orthogonal,
+        'GlorotUniform': tf.keras.initializers.GlorotUniform,
+        'Zeros': tf.keras.initializers.Zeros,
+        'Ones': tf.keras.initializers.Ones,
+        'L2': tf.keras.regularizers.L2,
+        'TimeDistributed': tf.keras.layers.TimeDistributed,
+        'LSTM': tf.keras.layers.LSTM,
+        'BatchNormalization': tf.keras.layers.BatchNormalization,
+        'RepeatVector': tf.keras.layers.RepeatVector,
+        'Concatenate': tf.keras.layers.Concatenate,
+        'Dropout': tf.keras.layers.Dropout,
+        'Dense': tf.keras.layers.Dense,
+        'InputLayer': tf.keras.layers.InputLayer,
+    }
+    try:
+        model = keras.models.load_model(
+            model_path, compile=False, safe_mode=False, custom_objects=custom_objects
+        )
+    except Exception:
+        model = tf.keras.models.load_model(
+            model_path, compile=False, custom_objects=custom_objects
+        )
     return {"config": cfg, "features": feats, "scalers": scalers, "model": model}
 
 
