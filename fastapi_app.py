@@ -232,41 +232,26 @@ def load_bundle(model_name: str, local_root: str) -> Dict:
         # already cached; use as-is
         pass
     else:
-        ok = download_production_artifacts(model_name, local_dir)
+        # Only try Model Registry - models should be deployed there
+        ok = download_registry_artifacts(model_name, local_dir, version=None)
         if not ok:
-            ok = download_registry_artifacts(model_name, local_dir, version=None)
-        if not ok:
-            raise RuntimeError(f"Cannot download artifacts for {model_name}")
+            raise RuntimeError(f"Cannot download artifacts for {model_name} from Model Registry. Make sure models are deployed to Production in Hopsworks UI.")
+    
     with open(os.path.join(local_dir, f"{model_name}_config.json"), 'r') as f:
         cfg = json.load(f)
     with open(os.path.join(local_dir, f"{model_name}_features.json"), 'r') as f:
         feats = json.load(f)
     scalers = joblib.load(os.path.join(local_dir, f"{model_name}_scalers.pkl"))
     model_path = os.path.join(local_dir, f"{model_name}.keras")
-    # Prefer Keras 3 loader for .keras artifacts; fallback to tf.keras, with custom_objects guard
-    custom_objects = {
-        'Orthogonal': tf.keras.initializers.Orthogonal,
-        'GlorotUniform': tf.keras.initializers.GlorotUniform,
-        'Zeros': tf.keras.initializers.Zeros,
-        'Ones': tf.keras.initializers.Ones,
-        'L2': tf.keras.regularizers.L2,
-        'TimeDistributed': tf.keras.layers.TimeDistributed,
-        'LSTM': tf.keras.layers.LSTM,
-        'BatchNormalization': tf.keras.layers.BatchNormalization,
-        'RepeatVector': tf.keras.layers.RepeatVector,
-        'Concatenate': tf.keras.layers.Concatenate,
-        'Dropout': tf.keras.layers.Dropout,
-        'Dense': tf.keras.layers.Dense,
-        'InputLayer': tf.keras.layers.InputLayer,
-    }
+    
+    # Simple model loading - retrain models if this fails
     try:
-        model = keras.models.load_model(
-            model_path, compile=False, safe_mode=False, custom_objects=custom_objects
-        )
-    except Exception:
-        model = tf.keras.models.load_model(
-            model_path, compile=False, custom_objects=custom_objects
-        )
+        model = keras.models.load_model(model_path, compile=False, safe_mode=False)
+        logger.info(f"Successfully loaded {model_name}")
+    except Exception as e:
+        logger.error(f"Failed to load {model_name}: {e}")
+        raise RuntimeError(f"Cannot load model {model_name}. Please retrain the models with the current environment.")
+    
     return {"config": cfg, "features": feats, "scalers": scalers, "model": model}
 
 

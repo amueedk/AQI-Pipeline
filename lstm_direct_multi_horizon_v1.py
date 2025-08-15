@@ -352,6 +352,53 @@ class DirectLSTMMultiHorizon:
         X_hexo, realized_templates = self.collect_horizon_exogenous_tensor(df_ex, base_idx, horizons)
         self.horizon_exogenous_list = realized_templates
 
+        # Add horizon-dependent, temporally correlated noise (AR(1)) to scaled exogenous features to mimic forecast errors
+        # Pollutants: std 0.05 at 1h → 0.30 at 72h
+        pol_tmpl = [
+            'carbon_monoxide_scaled_target_{h}h',
+            'ozone_scaled_target_{h}h',
+            'sulphur_dioxide_scaled_target_{h}h',
+            'nh3_scaled_target_{h}h',
+        ]
+        pol_idxs = [i for i, n in enumerate(realized_templates) if any(t.replace('{h}', 'h') in n for t in pol_tmpl)]
+        # Weather: std 0.03 at 1h → 0.20 at 72h (smaller than pollutants)
+        wx_tmpl = [
+            'temperature_scaled_target_{h}h',
+            'humidity_scaled_target_{h}h',
+            'pressure_scaled_target_{h}h',
+            'wind_speed_scaled_target_{h}h',
+        ]
+        wx_idxs = [i for i, n in enumerate(realized_templates) if any(t.replace('{h}', 'h') in n for t in wx_tmpl)]
+        
+        if (pol_idxs or wx_idxs) and X_hexo.shape[1] > 0:
+            T = X_hexo.shape[1]  # horizons
+            B = X_hexo.shape[0]
+            rho = 0.8  # AR(1) correlation
+            
+            # Add noise to pollutants
+            if pol_idxs:
+                Fp = len(pol_idxs)
+                std_schedule = np.linspace(0.05, 0.30, T).astype(np.float32)
+                eps = np.zeros((B, T, Fp), dtype=np.float32)
+                innov = np.random.normal(0.0, 1.0, size=(B, T, Fp)).astype(np.float32)
+                innov *= std_schedule[None, :, None]
+                eps[:, 0, :] = innov[:, 0, :]
+                for t in range(1, T):
+                    eps[:, t, :] = rho * eps[:, t - 1, :] + innov[:, t, :]
+                X_hexo[:, :, pol_idxs] = X_hexo[:, :, pol_idxs] + eps
+            
+            # Add noise to weather
+            if wx_idxs:
+                Fw = len(wx_idxs)
+                std_schedule = np.linspace(0.03, 0.20, T).astype(np.float32)
+                eps = np.zeros((B, T, Fw), dtype=np.float32)
+                innov = np.random.normal(0.0, 1.0, size=(B, T, Fw)).astype(np.float32)
+                innov *= std_schedule[None, :, None]
+                eps[:, 0, :] = innov[:, 0, :]
+                for t in range(1, T):
+                    eps[:, t, :] = rho * eps[:, t - 1, :] + innov[:, t, :]
+                X_hexo[:, :, wx_idxs] = X_hexo[:, :, wx_idxs] + eps
+
         # Positional enc [steps,2] → broadcast to batch
         pos = self.build_positional_encoding(steps)  # [steps,2]
         pos_b = np.repeat(pos[None, :, :], repeats=len(base_idx), axis=0)

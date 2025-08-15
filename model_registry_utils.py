@@ -116,14 +116,7 @@ def download_production_artifacts(model_name: str, local_dir: str) -> bool:
 
 def _get_latest_model(mr, model_name: str):
     """Return the latest version of a model, compatible with older SDKs."""
-    # Try direct get_model without version (some SDKs return latest)
-    try:
-        mdl = mr.get_model(model_name)
-        if mdl is not None:
-            return mdl
-    except Exception:
-        pass
-    # Fallback: list versions and pick max
+    # Always try to list versions first to get the actual latest
     try:
         # Some SDKs expose list_models(name=...) or get_models(name=...)
         if hasattr(mr, 'list_models'):
@@ -132,6 +125,7 @@ def _get_latest_model(mr, model_name: str):
             models = mr.get_models(name=model_name)
         else:
             models = []
+        
         # models could be list of dicts or objects with .version
         latest = None
         best_v = -1
@@ -142,13 +136,23 @@ def _get_latest_model(mr, model_name: str):
             if isinstance(v, int) and v > best_v:
                 latest = m
                 best_v = v
+        
         if latest is not None:
             # If latest is dict, get full model by name+version
             if isinstance(latest, dict):
                 return mr.get_model(model_name, version=latest.get('version'))
             return latest
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"Failed to list models for {model_name}: {e}")
+    
+    # Fallback: try direct get_model without version (some SDKs return latest)
+    try:
+        mdl = mr.get_model(model_name)
+        if mdl is not None:
+            return mdl
+    except Exception as e:
+        logger.warning(f"Failed to get model {model_name} without version: {e}")
+    
     raise RuntimeError(f"Model '{model_name}' not found in registry")
 
 
