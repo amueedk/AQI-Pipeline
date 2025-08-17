@@ -27,7 +27,7 @@ import json
 from hopsworks_integration import HopsworksUploader
 import tensorflow as tf
 from tensorflow.keras import Model, Input
-from tensorflow.keras.layers import LSTM, Dense, Dropout, BatchNormalization, TimeDistributed, RepeatVector, Concatenate
+from tensorflow.keras.layers import LSTM, Dense, Dropout, BatchNormalization, TimeDistributed, RepeatVector, Concatenate, LayerNormalization
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau, ModelCheckpoint
 from tensorflow.keras.regularizers import l2
@@ -74,6 +74,11 @@ CONFIG: Dict = {
     'weights_25_72': 1.0,
     # Training target mode
     'use_delta_targets': True,
+    # Regularization
+    'recurrent_dropout': 0.3,  # Recurrent dropout
+    'l2_kernel': 1e-4,      # L2 on kernel weights
+    'l2_recurrent': 1e-4,   # L2 on recurrent weights
+    'l2_output': 1e-4,      # L2 on output layer
 }
 
 
@@ -273,18 +278,37 @@ class DirectLSTMMultiHorizon:
         x = enc_in
         for i, units in enumerate(self.config['encoder_units']):
             return_sequences = i < len(self.config['encoder_units']) - 1
-            x = LSTM(units, return_sequences=return_sequences, dropout=self.config['dropout_rate'], name=f'enc_lstm_{i+1}')(x)
-            x = BatchNormalization(name=f'enc_bn_{i+1}')(x)
+            x = LSTM(
+                units, 
+                return_sequences=return_sequences, 
+                dropout=self.config['dropout_rate'],
+                recurrent_dropout=self.config['recurrent_dropout'],
+                kernel_regularizer=l2(self.config['l2_kernel']),
+                recurrent_regularizer=l2(self.config['l2_recurrent']),
+                name=f'enc_lstm_{i+1}'
+            )(x)
+            x = LayerNormalization(name=f'enc_ln_{i+1}')(x)
         context = x  # [B, enc_units_last]
 
         # Decoder inputs
         aux_in = Input(shape=(steps, dec_aux_dim), name='dec_aux_in')
         rep = RepeatVector(steps, name='repeat_ctx')(context)  # [B,steps,enc_dim]
         dec_stream = Concatenate(axis=-1, name='dec_concat')([rep, aux_in])
-        dec = LSTM(self.config['decoder_units'], return_sequences=True, name='dec_lstm')(dec_stream)
-        dec = BatchNormalization(name='dec_bn')(dec)
+        dec = LSTM(
+            self.config['decoder_units'], 
+            return_sequences=True, 
+            dropout=self.config['dropout_rate'],
+            recurrent_dropout=self.config['recurrent_dropout'],
+            kernel_regularizer=l2(self.config['l2_kernel']),
+            recurrent_regularizer=l2(self.config['l2_recurrent']),
+            name='dec_lstm'
+        )(dec_stream)
+        dec = LayerNormalization(name='dec_ln')(dec)
         dec = Dropout(self.config['dropout_rate'])(dec)
-        out = TimeDistributed(Dense(2, activation='linear', kernel_regularizer=l2(1e-4)), name='dec_head')(dec)
+        out = TimeDistributed(
+            Dense(2, activation='linear', kernel_regularizer=l2(self.config['l2_output'])), 
+            name='dec_head'
+        )(dec)
 
         model = Model([enc_in, aux_in], out, name='direct_lstm_mh')
 
@@ -312,7 +336,7 @@ class DirectLSTMMultiHorizon:
             w = tf.constant(weights, dtype=tf.float32)
             return tf.reduce_mean((mse + 0.2 * mae) * w)
 
-        model.compile(optimizer=Adam(learning_rate=self.config['learning_rate'], clipnorm=1.0), loss=weighted_loss, metrics=['mae'])
+        model.compile(optimizer=Adam(learning_rate=self.config['learning_rate'], clipnorm=0.5), loss=weighted_loss, metrics=['mae'])
         self.model = model
 
     # ---------- Training / Evaluation ----------
