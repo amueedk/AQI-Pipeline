@@ -27,7 +27,7 @@ import json
 from hopsworks_integration import HopsworksUploader
 import tensorflow as tf
 from tensorflow.keras import Model, Input
-from tensorflow.keras.layers import LSTM, Dense, Dropout, LayerNormalization, TimeDistributed, RepeatVector, Concatenate
+from tensorflow.keras.layers import LSTM, Dense, Dropout, BatchNormalization, TimeDistributed, RepeatVector, Concatenate
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau, ModelCheckpoint
 from tensorflow.keras.regularizers import l2
@@ -274,7 +274,7 @@ class DirectLSTMMultiHorizon:
         for i, units in enumerate(self.config['encoder_units']):
             return_sequences = i < len(self.config['encoder_units']) - 1
             x = LSTM(units, return_sequences=return_sequences, dropout=self.config['dropout_rate'], name=f'enc_lstm_{i+1}')(x)
-            x = LayerNormalization(name=f'enc_ln_{i+1}')(x)
+            x = BatchNormalization(name=f'enc_bn_{i+1}')(x)
         context = x  # [B, enc_units_last]
 
         # Decoder inputs
@@ -282,7 +282,7 @@ class DirectLSTMMultiHorizon:
         rep = RepeatVector(steps, name='repeat_ctx')(context)  # [B,steps,enc_dim]
         dec_stream = Concatenate(axis=-1, name='dec_concat')([rep, aux_in])
         dec = LSTM(self.config['decoder_units'], return_sequences=True, name='dec_lstm')(dec_stream)
-        dec = LayerNormalization(name='dec_ln')(dec)
+        dec = BatchNormalization(name='dec_bn')(dec)
         dec = Dropout(self.config['dropout_rate'])(dec)
         out = TimeDistributed(Dense(2, activation='linear', kernel_regularizer=l2(1e-4)), name='dec_head')(dec)
 
