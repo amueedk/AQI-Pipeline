@@ -27,8 +27,6 @@ EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=5 CMD curl -fsS http://localhost:8000/healthz || exit 1
 
-CMD ["uvicorn", "fastapi_app:app", "--host", "0.0.0.0", "--port", "${PORT:-8000}", "--workers", "1"]
-
-
+CMD ["uvicorn", "fastapi_app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
 
 
