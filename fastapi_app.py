@@ -244,9 +244,9 @@ def load_bundle(model_name: str, local_root: str) -> Dict:
     scalers = joblib.load(os.path.join(local_dir, f"{model_name}_scalers.pkl"))
     model_path = os.path.join(local_dir, f"{model_name}.keras")
     
-    # Simple model loading - retrain models if this fails
+    # Load using tf.keras to match training save stack
     try:
-        model = keras.models.load_model(model_path, compile=False, safe_mode=False)
+        model = tf.keras.models.load_model(model_path, compile=False)
         logger.info(f"Successfully loaded {model_name}")
     except Exception as e:
         logger.error(f"Failed to load {model_name}: {e}")

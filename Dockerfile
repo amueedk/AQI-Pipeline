@@ -8,25 +8,25 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# OS deps for TF/sklearn/kafka; curl for healthcheck
+# Minimal OS deps incl. build tools for native wheels (e.g., twofish)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential gcc libstdc++6 libssl3 libsasl2-2 tzdata curl \
+    curl build-essential \
  && rm -rf /var/lib/apt/lists/*
 
-# Python deps
+# Python deps from repo requirements.txt
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN python -m pip install --upgrade pip setuptools wheel && \
+    PIP_DEFAULT_TIMEOUT=180 pip install --no-cache-dir --prefer-binary -r requirements.txt
 
 # App code
 COPY . .
 
-# Writable cache for models
-RUN mkdir -p /app/temp/production_models /app/logs
+# Ensure log directory exists for FileHandler
+RUN mkdir -p /app/logs
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=5s --retries=5 CMD curl -fsS http://localhost:8000/healthz || exit 1
-
 CMD ["uvicorn", "fastapi_app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+
 
 

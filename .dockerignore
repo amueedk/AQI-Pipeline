@@ -8,9 +8,23 @@ __pycache__/
 .env
 temp/*
 EDAimages/
-Models (alternate)/
 logs/
 *.ipynb
 *.ipynb_checkpoints
+
+.git
+.venv
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+.env
+temp/*
+EDAimages/
+logs/
+*.ipynb
+*.ipynb_checkpoints
+
 
 
