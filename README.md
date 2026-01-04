@@ -198,22 +198,55 @@ curl -X POST https://api.github.com/repos/{owner}/{repo}/dispatches \
   -d '{"event_type": "hourly-trigger"}'
 ```
 
-## 🐳 Docker Setup
+## 🐳 Docker Deployment
 
-### Production Deployment
+### Environment Setup
+Create a `.env` file in the project root:
 ```bash
-# Build production image
-docker build -t aqi-forecast .
-
-# Run with environment variables
-docker run -p 8000:8000 --env-file .env aqi-forecast
+HOPSWORKS_API_KEY=your_hopsworks_key
+OPENWEATHER_API_KEY=your_openweather_key
+MODEL_SHORT_NAME=direct_lstm_short
+MODEL_MIDLONG_NAME=direct_lstm_midlong
 ```
 
-### Development
+### Quick Start with Docker Compose
 ```bash
-# Development with volume mounting
-docker-compose -f docker-compose.dev.yml up
+# First time (build and start)
+docker compose up -d --build
+
+# Check container logs
+docker compose logs -f api
+
+# Verify health
+curl http://localhost:8000/healthz
 ```
+
+### Access Points
+- **Dashboard**: http://localhost:8000/
+- **Health Check**: http://localhost:8000/healthz
+- **Current AQI**: http://localhost:8000/current
+- **72h Forecast**: http://localhost:8000/predict
+
+### Container Management
+```bash
+# Subsequent runs
+docker compose up -d
+
+# Rebuild after code changes
+docker compose up -d --build
+
+# Stop services
+docker compose down
+
+# View logs
+docker compose logs -f api
+```
+
+### Configuration Notes
+- **Timezone**: Container uses `Asia/Karachi` (Pakistan time)
+- **Port Mapping**: Default is `8000:8000`, change in `docker-compose.yml` if needed
+- **Model Cache**: Uses named volume to persist downloaded models between restarts
+- **Auto-Creation**: Logs and static directories are created automatically at runtime
 
 ## 📊 Dashboard Features
 
@@ -243,19 +276,39 @@ SHAP (SHapley Additive exPlanations) visualizations are available for model inte
 ```
 ├── fastapi_app.py              # Main web application
 ├── lstm_direct_multi_horizon_v1.py  # LSTM model training
+├── infer_online_lstm.py        # Online inference engine
 ├── data_collector.py           # OpenWeather data collection
 ├── feature_engineering.py      # Feature creation
 ├── hopsworks_integration.py    # Feature store integration
+├── model_registry_utils.py     # Model registry utilities
 ├── automated_hourly_run_updated.py  # Hourly data pipeline
 ├── automated_forecast_collector.py  # Forecast collection
+├── build_feature_views.py      # Feature view setup
+├── config.py                   # Configuration settings
 ├── .github/workflows/          # CI/CD pipelines
 │   ├── aqi-pipeline.yml        # Hourly data collection
 │   └── forecast-collector.yml  # Forecast collection
-├── Models (alternate)/         # Alternative ML models
+│   └── daily_retrain.yml       # Retraining model
+├── models/experimental/        # Alternative ML models
+│   ├── lightgbm_multi_horizon_trainer_v1.py
+│   ├── lightgbm_multi_horizon_trainer_v2.py
+│   ├── extratrees_multi_horizon_trainer_v2.py
+│   ├── randomforest_multi_horizon_trainer.py
+│   └── seq2seq_lstm_fullseq_teacherforcing.py
+├── notebooks/                  # Analysis and EDA notebooks
+│   ├── comprehensive_eda.ipynb
+│   └── eda.ipynb
+├── scripts/                    # Utility and setup scripts
+│   ├── one_time_setup/        # One-time setup scripts
+│   │   └── manual_historic_run.py
+│   ├── utilities/             # Utility scripts
+│   │   ├── fetch_new_feature_group_data.py
+│   │   └── fetch_forecast_group.py
+│   └── archived/              # Deprecated scripts
+│       └── automated_hourly_run.py
 ├── data/                       # Historical datasets
 ├── shap_lstm/                  # Model interpretability
-├── static/                     # Web assets
-└── logs/                       # Application logs
+└── Report/                     # Project documentation
 ```
 
 ### Adding New Models

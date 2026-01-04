@@ -5,9 +5,14 @@ This script fetches ALL data from the new Hopsworks feature group exactly as it 
 No filtering, no modifications - just raw data export from the clean features group.
 """
 import os
+import sys
 import pandas as pd
 from datetime import datetime
 import logging
+
+# Add project root to path to find modules
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
+
 from hopsworks_integration import HopsworksUploader
 from config import HOPSWORKS_CONFIG
 

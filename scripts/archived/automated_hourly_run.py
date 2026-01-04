@@ -1,4 +1,14 @@
 """
+⚠️ ARCHIVED - DO NOT USE ⚠️
+=============================
+This script has been replaced by automated_hourly_run_updated.py in the root directory.
+
+Use the updated version instead:
+    python automated_hourly_run_updated.py
+
+This file is kept for reference only.
+=============================
+
 Automated Hourly Data Run
 --------------------------
 This script is designed to be run automatically (e.g., by a GitHub Action)
@@ -12,6 +22,11 @@ It will:
 """
 import logging
 import os
+import sys
+
+# Add project root to path to find modules
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
+
 from config import HOPSWORKS_CONFIG
 from data_collector import collect_current_data_with_iqair, retry_on_network_error
 from feature_engineering import AQIFeatureEngineer

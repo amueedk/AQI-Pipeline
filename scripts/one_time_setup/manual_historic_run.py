@@ -14,11 +14,16 @@ Note: Uses multiple API calls to work around OpenWeather's record limit per requ
 """
 import logging
 import os
+import sys
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import time
 import requests
+
+# Add project root to path to find modules
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
+
 from config import OPENWEATHER_CONFIG, FEATURE_CONFIG, PATHS, HOPSWORKS_CONFIG
 from feature_engineering import AQIFeatureEngineer
 from hopsworks_integration import HopsworksUploader
